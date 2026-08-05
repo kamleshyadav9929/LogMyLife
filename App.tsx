@@ -7,7 +7,6 @@ import { THEMES, ThemeKey, ThemeConfig } from './src/theme/colors';
 import { FONTS } from './src/theme/typography';
 import { MasterDashboard } from './src/components/dashboard/MasterDashboard';
 import { DailyPlanner } from './src/components/planner/DailyPlanner';
-import { AcademicHub } from './src/components/academic/AcademicHub';
 import { AnalyticsDashboard } from './src/components/analytics/AnalyticsDashboard';
 import { JournalView } from './src/components/journal/JournalView';
 import { PullToLogModal } from './src/components/common/PullToLogModal';
@@ -20,8 +19,9 @@ import { StreakCalendarModal } from './src/components/common/StreakCalendarModal
 import { CategoryManagerModal } from './src/components/common/CategoryManagerModal';
 import { StreakCalendarView } from './src/components/streak/StreakCalendarView';
 import { PomodoroView } from './src/components/pomodoro/PomodoroView';
+import { SettingsView } from './src/components/settings/SettingsView';
 import { triggerHaptic } from './src/services/haptics';
-import { Calendar, CheckSquare, Sparkles, BookOpen, LayoutDashboard, CheckCircle2 } from 'lucide-react-native';
+import { Calendar, CheckSquare, BarChart2, BookOpen, LayoutDashboard, CheckCircle2, User, Sparkles } from 'lucide-react-native';
 
 import { SpatialBackgroundProvider } from './src/components/common/SpatialBackgroundContext';
 import { SpatialBackgroundContainer } from './src/components/common/SpatialBackgroundContainer';
@@ -39,7 +39,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'planner' | 'academic' | 'ai' | 'journal' | 'streak' | 'pomodoro'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'planner' | 'settings' | 'ai' | 'journal' | 'streak' | 'pomodoro'>('overview');
   const [currentThemeKey, setCurrentThemeKey] = useState<ThemeKey>('pure_white');
 
   const theme: ThemeConfig = THEMES[currentThemeKey];
@@ -242,16 +242,14 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'academic' && (
-                <AcademicHub
-                  timetable={timetable}
+              {activeTab === 'settings' && (
+                <SettingsView
+                  profile={profile}
+                  categories={categories}
                   theme={theme}
-                  onTimetableChange={async (updatedTt, updatedTasks) => {
-                    setTimetable(updatedTt);
-                    if (updatedTasks) {
-                      setTasks(updatedTasks);
-                    }
-                  }}
+                  onOpenEditProfile={() => setShowEditProfileModal(true)}
+                  onCycleTheme={handleCycleTheme}
+                  onCategoriesUpdated={(updatedCats) => setCategories(updatedCats)}
                 />
               )}
 
@@ -337,36 +335,12 @@ export default function App() {
                 style={styles.googleNavItem}
                 onPress={() => {
                   triggerHaptic.lightImpact();
-                  setActiveTab('academic');
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.googleIconPill, activeTab === 'academic' && styles.googleIconPillActive]}>
-                  <BookOpen
-                    size={20}
-                    color={activeTab === 'academic' ? '#0F172A' : '#64748B'}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.googleNavLabel,
-                    activeTab === 'academic' && styles.googleNavLabelActive,
-                  ]}
-                >
-                  Academics
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.googleNavItem}
-                onPress={() => {
-                  triggerHaptic.lightImpact();
                   setActiveTab('ai');
                 }}
                 activeOpacity={0.8}
               >
                 <View style={[styles.googleIconPill, activeTab === 'ai' && styles.googleIconPillActive]}>
-                  <Sparkles
+                  <BarChart2
                     size={20}
                     color={activeTab === 'ai' ? '#0F172A' : '#64748B'}
                   />
@@ -402,6 +376,30 @@ export default function App() {
                   ]}
                 >
                   Life Log
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.googleNavItem}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setActiveTab('settings');
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.googleIconPill, activeTab === 'settings' && styles.googleIconPillActive]}>
+                  <User
+                    size={20}
+                    color={activeTab === 'settings' ? '#2563EB' : '#64748B'}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.googleNavLabel,
+                    activeTab === 'settings' && styles.googleNavLabelActive,
+                  ]}
+                >
+                  You
                 </Text>
               </TouchableOpacity>
             </View>

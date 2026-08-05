@@ -51,7 +51,8 @@ export const HeaderBar: React.FC<Props> = ({
             onPress={onOpenSearch}
             activeOpacity={0.7}
           >
-            <Search size={15} color="#0F172A" />
+            {/* M3 onSurfaceVariant icon color */}
+            <Search size={18} color="#49454F" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -59,7 +60,7 @@ export const HeaderBar: React.FC<Props> = ({
             onPress={onOpenPomodoro}
             activeOpacity={0.7}
           >
-            <Clock size={15} color="#0F172A" />
+            <Clock size={18} color="#49454F" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -67,11 +68,12 @@ export const HeaderBar: React.FC<Props> = ({
             onPress={onCycleTheme}
             activeOpacity={0.7}
           >
-            <Palette size={15} color="#0F172A" />
+            <Palette size={18} color="#49454F" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.journalButton} onPress={onOpenJournal} activeOpacity={0.8}>
-            <Sparkles size={14} color="#0F172A" />
+            {/* M3 onSecondaryContainer icon color */}
+            <Sparkles size={14} color="#1D192B" />
             <Text style={styles.journalBtnText}>Log</Text>
           </TouchableOpacity>
         </View>
@@ -85,9 +87,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
+    // M3 Top App Bar: surfaceContainer background
+    backgroundColor: '#F3F4F6',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    // M3 outlineVariant for subtle divider
+    borderBottomColor: '#E7E0EC',
   },
   topRow: {
     flexDirection: 'row',
@@ -101,17 +105,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatarCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    // M3 primaryContainer tonal surface for avatar
+    backgroundColor: '#E8EAF6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitial: {
     fontFamily: FONTS.displayBold,
-    fontSize: 15,
-    color: '#0F172A',
+    fontSize: 16,
+    // M3 onPrimaryContainer text
+    color: '#1A1B52',
   },
   userText: {
     marginLeft: 10,
@@ -126,7 +132,8 @@ const styles = StyleSheet.create({
   userLevelSub: {
     fontFamily: FONTS.groteskMedium,
     fontSize: 11,
-    color: '#64748B',
+    // M3 onSurfaceVariant
+    color: '#49454F',
     marginTop: 1,
   },
   actionButtons: {
@@ -135,27 +142,30 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   iconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    // M3 Icon Button: 40x40dp, 20dp radius, surfaceVariant bg
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E7E0EC',
     alignItems: 'center',
     justifyContent: 'center',
   },
   journalButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
+    // M3 Filled Tonal Button: secondaryContainer bg, 20dp pill
+    backgroundColor: '#E8DEF8',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 18,
+    borderRadius: 20,
   },
   journalBtnText: {
     fontFamily: FONTS.groteskBold,
-    color: '#0F172A',
-    fontSize: 12,
+    // M3 onSecondaryContainer text
+    color: '#1D192B',
+    fontSize: 14,
+    letterSpacing: 0.1,
     marginLeft: 4,
   },
 });
+

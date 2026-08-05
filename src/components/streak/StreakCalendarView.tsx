@@ -14,7 +14,7 @@ interface Props {
   gamification: UserGamification;
   categories?: UserCategory[];
   onBackToDashboard: () => void;
-  onNavigateTab?: (tab: 'planner' | 'academic' | 'ai' | 'journal') => void;
+  onNavigateTab?: (tab: 'planner' | 'settings' | 'ai' | 'journal') => void;
 }
 
 const MONTH_NAMES = [

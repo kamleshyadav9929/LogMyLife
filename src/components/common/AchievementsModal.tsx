@@ -20,9 +20,9 @@ export const AchievementsModal: React.FC<Props> = ({ visible, onClose, theme, ga
 
   const achievements: Achievement[] = [
     {
-      id: 'dsa_ninja',
-      title: 'DSA Ninja',
-      description: 'Logged and completed 5+ DSA practice blocks',
+      id: 'skill_master',
+      title: 'Skill Master',
+      description: 'Logged and completed 5+ skill development blocks',
       iconName: 'brain',
       unlocked: true,
       reqCount: 5,

@@ -39,6 +39,7 @@ export interface Task {
   dateStr: string;   // "YYYY-MM-DD"
   notes?: string;
   requiresTimer?: boolean;
+  notificationEnabled?: boolean;
   timerDurationMins?: number;
   leftoverSeconds?: number;
   elapsedSeconds?: number;
@@ -55,6 +56,7 @@ export interface TimetableSlot {
   category: TaskCategory;
   instructor: string;
   notifyEnabled: boolean;
+  location?: { latitude: number; longitude: number; radiusMeters: number; locationName?: string };
 }
 
 export interface SubjectProgress {

@@ -6,6 +6,7 @@ import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
 import { PlannerEmptyIllustration } from '../common/EmptyStateIllustrations';
+import { ProductivityMeterGauge } from '../analytics/ProductivityMeterGauge';
 import {
   Sparkles,
   Clock,
@@ -16,7 +17,6 @@ import {
   ListTodo,
   Mic,
   X,
-  Tag,
   Flame,
 } from 'lucide-react-native';
 
@@ -36,7 +36,7 @@ interface Props {
   gamification: UserGamification;
   categories: UserCategory[];
   theme: ThemeConfig;
-  onNavigateTab: (tab: 'planner' | 'academic' | 'ai' | 'journal') => void;
+  onNavigateTab: (tab: 'planner' | 'ai' | 'journal') => void;
   onOpenAddTask: () => void;
   onOpenPomodoro: () => void;
   onOpenSearch: () => void;
@@ -71,6 +71,7 @@ export const MasterDashboard: React.FC<Props> = ({
 }) => {
   const [analyticsFilter, setAnalyticsFilter] = useState<'day' | 'week' | 'month'>('day');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [dashboardScheduleTab, setDashboardScheduleTab] = useState<'upcoming' | 'missed' | 'completed'>('upcoming');
 
   // Inline Search Results logic
@@ -165,17 +166,35 @@ export const MasterDashboard: React.FC<Props> = ({
     if (analyticsFilter === 'week') multiplier = 5.5;
     if (analyticsFilter === 'month') multiplier = 22;
 
-    const dsaMins = Math.round(tasks.filter(t => t.category === 'DSA' && t.completed).reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier);
-    const collegeMins = Math.round(tasks.filter(t => t.category === 'College' && t.completed).reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier);
-    const docMins = Math.round(tasks.filter(t => t.category === 'Documentary' && t.completed).reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier);
-    const personalMins = Math.round(tasks.filter(t => t.category === 'Personal' && t.completed).reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier);
-
-    const baseData = [
-      { name: 'College', mins: collegeMins, color: '#2563EB' },
-      { name: 'DSA / Study', mins: dsaMins, color: '#7C3AED' },
-      { name: 'Documentary', mins: docMins, color: '#D97706' },
-      { name: 'Personal', mins: personalMins, color: '#10B981' },
+    const defaultCatList = [
+      { id: 'cat-work', name: 'Work & Projects', color: '#2563EB' },
+      { id: 'cat-learning', name: 'Learning & Skills', color: '#7C3AED' },
+      { id: 'cat-health', name: 'Health & Fitness', color: '#10B981' },
+      { id: 'cat-personal', name: 'Personal & Life', color: '#F59E0B' },
+      { id: 'cat-focus', name: 'Focus & Deep Work', color: '#0EA5E9' },
     ];
+
+    const activeCategories = (categories && categories.length > 0)
+      ? categories.map(c => ({ id: c.id, name: c.name, color: c.color }))
+      : defaultCatList;
+
+    const baseData = activeCategories.map(cat => {
+      const mins = Math.round(
+        tasks
+          .filter(t => t.completed && (
+            t.category === cat.id ||
+            t.category === cat.name ||
+            (cat.name === 'Learning & Skills' && (t.category === 'DSA' || t.category === 'Study')) ||
+            (cat.name === 'Work & Projects' && (t.category === 'College' || t.category === 'Work'))
+          ))
+          .reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier
+      );
+      return {
+        name: cat.name,
+        mins,
+        color: cat.color,
+      };
+    });
 
     const totalMins = baseData.reduce((acc, curr) => acc + curr.mins, 0);
 
@@ -198,17 +217,17 @@ export const MasterDashboard: React.FC<Props> = ({
 
   const analytics = getAnalyticsData();
 
-  // Donut chart SVG math
-  const size = 140;
-  const strokeWidth = 16;
-  const center = size / 2;
-  const radius = center - strokeWidth;
-  const circumference = 2 * Math.PI * radius;
+  // Meter SVG math & Productivity score calculation
+  const meterSize = 120;
+  const strokeWidth = 14;
+  const meterCenter = meterSize / 2;
+  const meterRadius = meterCenter - strokeWidth;
+  const meterCircumference = 2 * Math.PI * meterRadius;
 
   let cumulativeAngle = 0;
-  const donutSegments = analytics.categories.map(cat => {
-    const strokeDasharray = `${(cat.pct / 100) * circumference} ${circumference}`;
-    const strokeDashoffset = -((cumulativeAngle / 100) * circumference);
+  const donutSegments = analytics.categories.map((cat) => {
+    const strokeDasharray = `${(cat.pct / 100) * meterCircumference} ${meterCircumference}`;
+    const strokeDashoffset = -((cumulativeAngle / 100) * meterCircumference);
     cumulativeAngle += cat.pct;
     return {
       ...cat,
@@ -216,6 +235,28 @@ export const MasterDashboard: React.FC<Props> = ({
       strokeDashoffset,
     };
   });
+
+  const completedTasksCount = tasks.filter((t) => t.completed).length;
+  const totalTasksCount = tasks.length;
+  const productivityScore =
+    totalTasksCount > 0
+      ? Math.round((completedTasksCount / totalTasksCount) * 100)
+      : analytics.totalMins > 0
+      ? 85
+      : 75;
+
+  let scoreStatusLabel = 'High Productivity';
+  let scoreStatusColor = '#10B981';
+  if (productivityScore >= 80) {
+    scoreStatusLabel = 'High Productivity';
+    scoreStatusColor = '#10B981';
+  } else if (productivityScore >= 50) {
+    scoreStatusLabel = 'Moderate Focus';
+    scoreStatusColor = '#F59E0B';
+  } else {
+    scoreStatusLabel = 'Needs Focus Push';
+    scoreStatusColor = '#EF4444';
+  }
 
   function parseTimeToDec(timeStr?: string): number {
     if (!timeStr) return 9;
@@ -232,12 +273,14 @@ export const MasterDashboard: React.FC<Props> = ({
   }
 
   const categoryColors: Record<string, string> = {
-    DSA: '#7C3AED',
-    Study: '#7C3AED',
-    College: '#2563EB',
+    'Work & Projects': '#2563EB',
+    'Learning & Skills': '#7C3AED',
+    'Health & Fitness': '#10B981',
+    'Personal & Life': '#F59E0B',
+    'Focus & Deep Work': '#0EA5E9',
     Work: '#2563EB',
-    Documentary: '#D97706',
-    Personal: '#10B981',
+    Study: '#7C3AED',
+    Personal: '#F59E0B',
     Wastage: '#EF4444',
   };
 
@@ -305,23 +348,14 @@ export const MasterDashboard: React.FC<Props> = ({
             )}
           </TouchableOpacity>
 
-          {/* Category Manager Button */}
-          {onOpenCategoryManager && (
-            <TouchableOpacity
-              style={[styles.profileAvatarStandalone, { backgroundColor: '#EFF6FF', borderWidth: 0 }]}
-              onPress={() => {
-                triggerHaptic.lightImpact();
-                onOpenCategoryManager();
-              }}
-              activeOpacity={0.85}
-            >
-              <Tag size={18} color="#2563EB" />
-            </TouchableOpacity>
-          )}
-
-          {/* Standalone Taller Flat Inline Search Bar (No Outer Borders or Shadows) */}
-          <View style={styles.googleSearchBarContainer}>
-            <Search size={18} color="#64748B" style={{ marginLeft: 14, marginRight: 8 }} />
+          {/* Standalone Flat Inline Search Bar (Pure White Background on Click/Focus, No Outer Borders) */}
+          <View
+            style={[
+              styles.googleSearchBarContainer,
+              (isSearchFocused || searchQuery.length > 0) && styles.googleSearchBarContainerFocused,
+            ]}
+          >
+            <Search size={18} color={isSearchFocused ? '#0F172A' : '#64748B'} style={{ marginLeft: 14, marginRight: 8 }} />
             <TextInput
               style={styles.inlineSearchInput}
               value={searchQuery}
@@ -329,6 +363,11 @@ export const MasterDashboard: React.FC<Props> = ({
               placeholder="Search tasks, logs..."
               placeholderTextColor="#64748B"
               returnKeyType="search"
+              onFocus={() => {
+                triggerHaptic.lightImpact();
+                setIsSearchFocused(true);
+              }}
+              onBlur={() => setIsSearchFocused(false)}
             />
             {searchQuery.length > 0 ? (
               <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 6, marginRight: 6 }}>
@@ -340,30 +379,57 @@ export const MasterDashboard: React.FC<Props> = ({
           </View>
         </View>
 
-        {/* Inline Search Dropdown Box (Opens Right There) */}
-        {searchQuery.trim().length > 0 && (
-          <View style={styles.inlineSearchResultsCard}>
-            <View style={styles.inlineSearchHeader}>
-              <Text style={styles.inlineSearchTitle}>Search Results ({searchResults.length})</Text>
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={styles.clearSearchText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Faint line below search bar */}
+        <View style={styles.headerBottomHairline} />
+      </View>
 
-            {searchResults.length === 0 ? (
-              <Text style={styles.noResultsText}>No items found for "{searchQuery}"</Text>
-            ) : (
-              searchResults.slice(0, 6).map((item) => (
+      {/* Screen Background Below Header when Search is Active/Clicked */}
+      {(isSearchFocused || searchQuery.trim().length > 0) ? (
+        <View style={styles.whiteSearchOverlayContent}>
+          <View style={styles.inlineSearchHeader}>
+            <Text style={styles.inlineSearchTitle}>
+              {searchQuery.trim().length > 0 ? `Search Results (${searchResults.length})` : 'Quick Search'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery('');
+                setIsSearchFocused(false);
+              }}
+            >
+              <Text style={styles.clearSearchText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          {searchQuery.trim().length === 0 ? (
+            <View style={styles.quickSearchHintsBox}>
+              <Text style={styles.quickSearchHintTitle}>Tap to search categories or tasks:</Text>
+              <View style={styles.quickSearchTagsRow}>
+                {['Work & Projects', 'Learning & Skills', 'Health & Fitness', 'Personal & Life', 'Focus & Deep Work'].map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.quickSearchTagPill}
+                    onPress={() => setSearchQuery(tag)}
+                  >
+                    <Text style={styles.quickSearchTagText}>{tag}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : searchResults.length === 0 ? (
+            <Text style={styles.noResultsText}>No items found for "{searchQuery}"</Text>
+          ) : (
+            <View style={{ gap: 4 }}>
+              {searchResults.slice(0, 10).map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={styles.inlineResultRow}
                   onPress={() => {
                     triggerHaptic.lightImpact();
                     setSearchQuery('');
-                    // Navigate to the relevant tab based on result type
+                    setIsSearchFocused(false);
                     if (item.type === 'Task') onNavigateTab('planner');
-                    else if (item.type === 'Class') onNavigateTab('academic');
-                    else if (item.type === 'Syllabus') onNavigateTab('academic');
+                    else if (item.type === 'Class') onNavigateTab('planner');
+                    else if (item.type === 'Syllabus') onNavigateTab('ai');
                     else if (item.type === 'Journal') onNavigateTab('journal');
                   }}
                 >
@@ -375,17 +441,14 @@ export const MasterDashboard: React.FC<Props> = ({
                     <Text style={styles.resultTypeBadgeText}>{item.type}</Text>
                   </View>
                 </TouchableOpacity>
-              ))
-            )}
-          </View>
-        )}
-
-        {/* Faint line below search bar */}
-        <View style={styles.headerBottomHairline} />
-      </View>
-
-      {/* 2. Last 7 Days Streak (Centered Bold Heading with Google Arrow on right to open Month Calendar) */}
-      <View style={styles.streakSection}>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : (
+        <>
+          {/* 2. Last 7 Days Streak (Centered Bold Heading with Google Arrow on right to open Month Calendar) */}
+          <View style={styles.streakSection}>
         <TouchableOpacity
           style={styles.streakHeaderRowTouchable}
           onPress={() => {
@@ -456,17 +519,17 @@ export const MasterDashboard: React.FC<Props> = ({
           </View>
         </View>
 
-        {/* Side-by-Side Pie Chart and Category Distribution */}
+        {/* Side-by-Side: Total Logged Pie Chart on Left, Compact Categories List on Right */}
         <View style={styles.analyticsSideBySideRow}>
-          {/* Pie / Donut Chart with Total Time in Center */}
+          {/* LEFT: Pie / Donut Chart with Total Time in Center */}
           <View style={styles.chartCenterWrapper}>
             <View style={styles.svgContainer}>
-              <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                <G rotation="-90" origin={`${center}, ${center}`}>
+              <Svg width={meterSize} height={meterSize} viewBox={`0 0 ${meterSize} ${meterSize}`}>
+                <G rotation="-90" origin={`${meterCenter}, ${meterCenter}`}>
                   <Circle
-                    cx={center}
-                    cy={center}
-                    r={radius}
+                    cx={meterCenter}
+                    cy={meterCenter}
+                    r={meterRadius}
                     stroke="#F1F5F9"
                     strokeWidth={strokeWidth}
                     fill="transparent"
@@ -474,9 +537,9 @@ export const MasterDashboard: React.FC<Props> = ({
                   {donutSegments.map((segment, index) => (
                     <Circle
                       key={index}
-                      cx={center}
-                      cy={center}
-                      r={radius}
+                      cx={meterCenter}
+                      cy={meterCenter}
+                      r={meterRadius}
                       stroke={segment.color}
                       strokeWidth={strokeWidth}
                       strokeDasharray={segment.strokeDasharray}
@@ -488,30 +551,34 @@ export const MasterDashboard: React.FC<Props> = ({
                 </G>
               </Svg>
 
-              {/* Total Time Text at Center */}
-              <View style={styles.donutCenterOverlay}>
-                <Text style={styles.totalTimeCenterVal}>{analytics.formattedTotalTime}</Text>
-                <Text style={styles.totalTimeCenterLabel}>TOTAL LOGGED</Text>
+              <View style={styles.donutCenterOverlayMeter}>
+                <Text style={styles.totalTimeCenterValMeter}>{analytics.formattedTotalTime}</Text>
+                <Text style={styles.totalTimeCenterLabelMeter}>TOTAL LOGGED</Text>
               </View>
             </View>
           </View>
 
-          {/* Vertical Categories View (Name + Dot on left, Time on right) */}
-          <View style={styles.verticalCategoryList}>
+          {/* RIGHT: Compact Categories & Time List (Unboxed, Small Font, Flat Rows) */}
+          <View style={styles.sideCategoryList}>
             {analytics.categories.map((cat, idx) => (
-              <View key={idx} style={styles.categoryRowItem}>
+              <View key={idx} style={styles.sideCategoryRowItem}>
                 <View style={styles.catLeftInfo}>
                   <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
-                  <Text style={styles.categoryNameText}>{cat.name}</Text>
+                  <Text style={styles.compactCategoryNameText} numberOfLines={1}>
+                    {cat.name}
+                  </Text>
                 </View>
 
                 <View style={styles.catRightInfo}>
-                  <Text style={styles.categoryTimeVal}>{cat.formattedTime}</Text>
+                  <Text style={styles.compactCategoryTimeVal}>{cat.formattedTime}</Text>
                 </View>
               </View>
             ))}
           </View>
         </View>
+
+        {/* Faint Line ONLY Below Categories */}
+        <View style={styles.categoriesFaintBottomDivider} />
 
         {/* View Full Analytics Button (Solid Royal Blue Background) */}
         <TouchableOpacity
@@ -702,6 +769,8 @@ export const MasterDashboard: React.FC<Props> = ({
           <Text style={styles.dockItemText}>Badges</Text>
         </TouchableOpacity>
       </View>
+        </>
+      )}
     </ScrollView>
   );
 };
@@ -748,6 +817,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  googleSearchBarContainerFocused: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   inlineSearchInput: {
     flex: 1,
     fontFamily: FONTS.groteskMedium,
@@ -768,6 +845,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 4,
+  },
+  whiteSearchOverlayContent: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 40,
+    minHeight: 450,
+  },
+  quickSearchHintsBox: {
+    paddingVertical: 12,
+  },
+  quickSearchHintTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 10,
+  },
+  quickSearchTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickSearchTagPill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  quickSearchTagText: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: '#0F172A',
   },
   inlineSearchHeader: {
     flexDirection: 'row',
@@ -960,11 +1069,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 16,
+    marginVertical: 14,
   },
   chartCenterWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingRight: 6,
   },
   svgContainer: {
     position: 'relative',
@@ -990,36 +1100,71 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 2,
   },
-  verticalCategoryList: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  categoryRowItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  donutCenterOverlayMeter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    justifyContent: 'center',
+  },
+  totalTimeCenterValMeter: {
+    fontFamily: FONTS.extraBold,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  totalTimeCenterLabelMeter: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 8,
+    color: '#64748B',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  sideCategoryList: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  sideCategoryRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
   },
   catLeftInfo: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 8,
+  },
+  compactCategoryNameText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: '#0F172A',
+    flexShrink: 1,
+  },
+  catRightInfo: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+  },
+  compactCategoryTimeVal: {
+    fontFamily: FONTS.medium,
+    fontSize: 11.5,
+    color: '#64748B',
+  },
+  categoriesFaintBottomDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginTop: 12,
+    marginBottom: 8,
   },
   categoryDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     marginRight: 8,
-  },
-  categoryNameText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 13.5,
-    color: '#0F172A',
-  },
-  catRightInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   categoryTimeVal: {
     fontFamily: FONTS.groteskSemibold,

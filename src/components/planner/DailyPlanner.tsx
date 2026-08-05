@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,29 +8,29 @@ import {
   Platform,
   Modal,
   TextInput,
-  Switch,
 } from 'react-native';
 import { Task, TaskCategory, UserCategory } from '../../types';
-import { ThemeConfig, getCategoryColor, getCategoryLightBg, getCategoryTextColor } from '../../theme/colors';
+import { ThemeConfig, getCategoryColor, getCategoryLightBg, getCategoryTextColor, getCategoryName } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { Database } from '../../storage/db';
 import { triggerHaptic } from '../../services/haptics';
 import { BottomSheet } from '../common/BottomSheet';
+import { TimePickerModal } from '../common/TimePickerModal';
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Calendar,
   Plus,
   X,
   Clock,
   Check,
-  CheckCircle2,
   Trash2,
-  Flame,
-  CheckSquare,
   AlertCircle,
-  Play
+  Play,
+  ArrowLeft,
+  Timer,
+  Bell,
+  BellOff,
+  CheckCircle2,
 } from 'lucide-react-native';
 
 interface Props {
@@ -60,10 +60,21 @@ function parseTimeToDecimalHour(timeStr: string): number {
 
 function formatHourLabel(h: number): string {
   const normalized = (h + 24) % 24;
-  if (normalized === 0) return '12:00 AM';
-  if (normalized === 12) return '12:00 PM';
-  if (normalized > 12) return `${normalized - 12}:00 PM`;
-  return `${normalized}:00 AM`;
+  if (normalized === 0) return '12 am';
+  if (normalized === 12) return '12 pm';
+  if (normalized > 12) return `${normalized - 12} pm`;
+  return `${normalized} am`;
+}
+
+function formatDecimalHourLabel(dec: number): string {
+  const h = Math.floor(dec) % 24;
+  const mins = Math.round((dec - Math.floor(dec)) * 60);
+  const period = h >= 12 ? 'pm' : 'am';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  if (mins === 0) {
+    return `${displayH} ${period}`;
+  }
+  return `${displayH}:${mins.toString().padStart(2, '0')} ${period}`;
 }
 
 function getCatStyle(categories: UserCategory[], categoryId: string): { bg: string; bar: string; text: string } {
@@ -82,6 +93,74 @@ function getLocalDateStr(d: Date): string {
   return `${year}-${month}-${date}`;
 }
 
+function calculateDayProductivityScore(dayTasks: Task[]): { score: number; colorState: 'good' | 'avg' | 'worse' | 'empty' } {
+  if (!dayTasks || dayTasks.length === 0) {
+    return { score: 0, colorState: 'empty' };
+  }
+  const completedCount = dayTasks.filter(t => t.completed).length;
+  const ratio = completedCount / dayTasks.length;
+  const score = Math.round(ratio * 100);
+
+  if (score >= 70) {
+    return { score, colorState: 'good' };
+  } else if (score >= 40) {
+    return { score, colorState: 'avg' };
+  } else {
+    return { score, colorState: 'worse' };
+  }
+}
+
+interface TimelineSegment {
+  startDec: number;
+  endDec: number;
+  task?: Task;
+}
+
+function buildTimelineSegments(dayTasks: Task[]): TimelineSegment[] {
+  const sortedTasks = [...dayTasks]
+    .map(t => {
+      const sDec = parseTimeToDecimalHour(t.startTime);
+      let eDec = t.endTime ? parseTimeToDecimalHour(t.endTime) : sDec + (t.durationMins ? t.durationMins / 60 : 1);
+      if (eDec <= sDec) eDec = sDec + 1;
+      return { task: t, startDec: sDec, endDec: eDec };
+    })
+    .filter(t => t.startDec >= 0 && t.startDec < 24)
+    .sort((a, b) => a.startDec - b.startDec);
+
+  const segments: TimelineSegment[] = [];
+  let currentHour = 0;
+
+  for (const item of sortedTasks) {
+    if (item.startDec > currentHour) {
+      let gapStart = currentHour;
+      while (gapStart < item.startDec) {
+        let nextGapEnd = Math.floor(gapStart) + 1;
+        if (nextGapEnd > item.startDec) nextGapEnd = item.startDec;
+        segments.push({ startDec: gapStart, endDec: nextGapEnd });
+        gapStart = nextGapEnd;
+      }
+    }
+
+    const actualEnd = Math.min(24, Math.max(item.startDec + 0.25, item.endDec));
+    segments.push({
+      startDec: item.startDec,
+      endDec: actualEnd,
+      task: item.task,
+    });
+
+    currentHour = Math.max(currentHour, actualEnd);
+  }
+
+  while (currentHour < 24) {
+    const nextHour = Math.min(24, Math.floor(currentHour) + 1);
+    const end = nextHour > currentHour ? nextHour : currentHour + 1;
+    segments.push({ startDec: currentHour, endDec: Math.min(24, end) });
+    currentHour = Math.min(24, end);
+  }
+
+  return segments;
+}
+
 export const DailyPlanner: React.FC<Props> = ({
   tasks = [],
   theme,
@@ -92,17 +171,24 @@ export const DailyPlanner: React.FC<Props> = ({
   onTasksUpdated,
   onStartTaskTimer,
 }) => {
-  const [viewMode, setViewMode] = useState<'day' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [scheduleSubTab, setScheduleSubTab] = useState<'all' | 'upcoming' | 'completed' | 'missed'>('all');
+  const [viewMode, setViewMode] = useState<'month' | 'timeline'>('month');
 
   // Add Event Sheet State
   const [showAddEventSheet, setShowAddEventSheet] = useState(false);
-  const [clickedSlotHour, setClickedSlotHour] = useState<number>(9);
   const [eventTitle, setEventTitle] = useState('');
   const [eventCategory, setEventCategory] = useState<TaskCategory>(categories[0]?.id || 'Personal');
   const [startTimeStr, setStartTimeStr] = useState('09:00 AM');
   const [endTimeStr, setEndTimeStr] = useState('10:00 AM');
+  const [eventRequiresTimer, setEventRequiresTimer] = useState(false);
+  const [eventNotificationEnabled, setEventNotificationEnabled] = useState(true);
+
+  // Detail Task BottomSheet State
+  const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
+
+  // Time Picker Modal State
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end'>('start');
 
   // Task Verification Modal State
   const [verifyingTask, setVerifyingTask] = useState<Task | null>(null);
@@ -116,94 +202,12 @@ export const DailyPlanner: React.FC<Props> = ({
   }, []);
 
   const selectedDateStr = getLocalDateStr(selectedDate);
-  const isSelectedToday = selectedDateStr === getLocalDateStr(new Date());
+  const todayStr = getLocalDateStr(nowTime);
+  const todayDateNum = nowTime.getDate();
 
   // Filter tasks for selected date
   const dayTasks = (tasks || []).filter(t => t.dateStr === selectedDateStr);
-
-  // Compute 7-day carousel around selected date
-  const getCarouselDates = (): Date[] => {
-    const list: Date[] = [];
-    for (let i = -3; i <= 3; i++) {
-      const d = new Date(selectedDate);
-      d.setDate(d.getDate() + i);
-      list.push(d);
-    }
-    return list;
-  };
-  const carouselDates = getCarouselDates();
-
-  // Counts for sub-tabs
-  const currentHourDec = nowTime.getHours() + nowTime.getMinutes() / 60;
-  const todayStr = getLocalDateStr(nowTime);
-  const isPastDate = selectedDateStr < todayStr;
-  const isFutureDate = selectedDateStr > todayStr;
-
-  const countAll = dayTasks.length;
-  const countCompleted = dayTasks.filter(t => t.completed).length;
-
-  const countUpcoming = dayTasks.filter(t => {
-    if (t.completed) return false;
-    if (isFutureDate) return true;
-    if (isPastDate) return false;
-    const startDec = parseTimeToDecimalHour(t.startTime);
-    const endDec = startDec + Math.max(0.5, (t.durationMins || 60) / 60);
-    return endDec > currentHourDec;
-  }).length;
-
-  const countMissed = dayTasks.filter(t => {
-    if (t.completed) return false;
-    if (isPastDate) return true;
-    if (isFutureDate) return false;
-    const startDec = parseTimeToDecimalHour(t.startTime);
-    const endDec = startDec + Math.max(0.5, (t.durationMins || 60) / 60);
-    return endDec <= currentHourDec;
-  }).length;
-
-  // Filtered tasks according to subtab
-  const getFilteredTasks = (): Task[] => {
-    let list = [...dayTasks];
-    if (scheduleSubTab === 'completed') {
-      list = list.filter(t => t.completed);
-    } else if (scheduleSubTab === 'upcoming') {
-      list = list.filter(t => {
-        if (t.completed) return false;
-        if (isFutureDate) return true;
-        if (isPastDate) return false;
-        const startDec = parseTimeToDecimalHour(t.startTime);
-        const endDec = startDec + Math.max(0.5, (t.durationMins || 60) / 60);
-        return endDec > currentHourDec;
-      });
-    } else if (scheduleSubTab === 'missed') {
-      list = list.filter(t => {
-        if (t.completed) return false;
-        if (isPastDate) return true;
-        if (isFutureDate) return false;
-        const startDec = parseTimeToDecimalHour(t.startTime);
-        const endDec = startDec + Math.max(0.5, (t.durationMins || 60) / 60);
-        return endDec <= currentHourDec;
-      });
-    }
-
-    // Sort chronologically by start time
-    return list.sort((a, b) => parseTimeToDecimalHour(a.startTime) - parseTimeToDecimalHour(b.startTime));
-  };
-
-  const filteredTasks = getFilteredTasks();
-
-  const handlePrevDay = () => {
-    triggerHaptic.lightImpact();
-    const prev = new Date(selectedDate);
-    prev.setDate(prev.getDate() - 1);
-    setSelectedDate(prev);
-  };
-
-  const handleNextDay = () => {
-    triggerHaptic.lightImpact();
-    const next = new Date(selectedDate);
-    next.setDate(next.getDate() + 1);
-    setSelectedDate(next);
-  };
+  const timelineSegments = buildTimelineSegments(dayTasks);
 
   const handlePrevMonth = () => {
     triggerHaptic.lightImpact();
@@ -217,9 +221,16 @@ export const DailyPlanner: React.FC<Props> = ({
     setSelectedDate(next);
   };
 
-  const handleTodayClick = () => {
-    triggerHaptic.mediumImpact();
-    setSelectedDate(new Date());
+  const handleOpenSegmentAddTask = (startDec: number, endDec: number) => {
+    triggerHaptic.lightImpact();
+    const startStr = formatDecimalHourLabel(startDec).toUpperCase();
+    const endStr = formatDecimalHourLabel(endDec).toUpperCase();
+    setStartTimeStr(startStr);
+    setEndTimeStr(endStr);
+    setEventTitle('');
+    setEventRequiresTimer(false);
+    setEventNotificationEnabled(true);
+    setShowAddEventSheet(true);
   };
 
   const handleSaveEvent = async () => {
@@ -239,6 +250,8 @@ export const DailyPlanner: React.FC<Props> = ({
         completed: false,
         snoozed: false,
         dateStr: selectedDateStr,
+        requiresTimer: eventRequiresTimer,
+        notificationEnabled: eventNotificationEnabled,
       });
 
       if (onTasksUpdated) {
@@ -266,16 +279,6 @@ export const DailyPlanner: React.FC<Props> = ({
         setVerificationReason('timer_required');
         return;
       }
-    }
-
-    const startDec = parseTimeToDecimalHour(task.startTime);
-    const endDec = startDec + Math.max(0.5, (task.durationMins || 60) / 60);
-    const isToday = selectedDate.toDateString() === new Date().toDateString();
-
-    if (isToday && (currentHourDec < startDec || currentHourDec > endDec)) {
-      setVerifyingTask(task);
-      setVerificationReason('out_of_time');
-      return;
     }
 
     onToggleComplete(task.id);
@@ -340,358 +343,548 @@ export const DailyPlanner: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      {/* 1. Header Navigation Bar */}
-      <View style={styles.headerBar}>
-        <View>
-          <Text style={styles.headerTitle}>Daily Planner</Text>
-          <Text style={styles.headerSubtitle}>
-            {viewMode === 'day' ? 'Daily Schedule & Tasks' : 'Monthly Overview'}
-          </Text>
-        </View>
-
-        <View style={styles.headerRightRow}>
-          {/* Day / Month Segment Switcher */}
-          <View style={styles.segmentedControl}>
+      {/* 1. Top Header Row (Month Name only in header, Today Date Pill on Right Side) */}
+      <View style={styles.topHeaderRow}>
+        <View style={styles.headerLeftRow}>
+          {viewMode === 'timeline' && (
             <TouchableOpacity
-              style={[styles.segmentedPill, viewMode === 'day' && styles.segmentedPillActive]}
-              onPress={() => {
-                triggerHaptic.lightImpact();
-                setViewMode('day');
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.segmentedPillText, viewMode === 'day' && styles.segmentedPillTextActive]}>
-                Day
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.segmentedPill, viewMode === 'month' && styles.segmentedPillActive]}
+              style={styles.headerBackBtn}
               onPress={() => {
                 triggerHaptic.lightImpact();
                 setViewMode('month');
               }}
               activeOpacity={0.8}
             >
-              <Text style={[styles.segmentedPillText, viewMode === 'month' && styles.segmentedPillTextActive]}>
-                Month
-              </Text>
+              <ArrowLeft size={20} color="#0F172A" />
             </TouchableOpacity>
-          </View>
+          )}
 
-          {/* Soft Blue + Add Task Button */}
-          <TouchableOpacity
-            style={styles.softAddTaskBtn}
-            onPress={onAddTask}
-            activeOpacity={0.85}
-          >
-            <Plus size={16} color="#2563EB" />
-            <Text style={styles.softAddTaskBtnText}>Task</Text>
-          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>
+              {viewMode === 'timeline'
+                ? selectedDate.toLocaleDateString('en-US', { month: 'long' })
+                : 'Planner'}
+            </Text>
+            <Text style={styles.headerSubtitle}>Monthly schedule & timetable</Text>
+          </View>
         </View>
+
+        {/* Current Date Pill on Right Side */}
+        <TouchableOpacity
+          style={styles.headerTodayPillRight}
+          onPress={() => {
+            triggerHaptic.mediumImpact();
+            setSelectedDate(new Date());
+            setViewMode('timeline');
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.headerTodayDateNum}>{todayDateNum}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 2. DAY VIEW */}
-      {viewMode === 'day' && (
-        <ScrollView style={styles.dayViewScroll} showsVerticalScrollIndicator={false}>
-          {/* Date Selector Navigation Bar */}
-          <View style={styles.dateNavRow}>
-            <TouchableOpacity style={styles.navArrowBtn} onPress={handlePrevDay} activeOpacity={0.7}>
-              <ChevronLeft size={20} color="#0F172A" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.dateDisplayPill}
-              onPress={() => setViewMode('month')}
-              activeOpacity={0.8}
-            >
-              <Calendar size={16} color="#2563EB" />
-              <Text style={styles.dateDisplayText}>
-                {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-              </Text>
-              <ChevronDown size={14} color="#64748B" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.navArrowBtn} onPress={handleNextDay} activeOpacity={0.7}>
-              <ChevronRight size={20} color="#0F172A" />
-            </TouchableOpacity>
-
-            {!isSelectedToday && (
-              <TouchableOpacity style={styles.todayPillBtn} onPress={handleTodayClick} activeOpacity={0.8}>
-                <Text style={styles.todayPillText}>Today</Text>
+      {/* VIEW 1: MONTH CALENDAR PAGE */}
+      {viewMode === 'month' && (
+        <ScrollView style={styles.mainScrollView} showsVerticalScrollIndicator={false}>
+          {/* Month Navigation Header with Soft Round Background Fill & No Borders */}
+          <View style={styles.monthNavWrapper}>
+            <View style={styles.monthNavPill}>
+              <TouchableOpacity style={styles.monthNavArrowBtn} onPress={handlePrevMonth} activeOpacity={0.7}>
+                <ChevronLeft size={18} color="#0F172A" />
               </TouchableOpacity>
-            )}
+
+              <Text style={styles.monthNavTitle}>{monthYearHeader}</Text>
+
+              <TouchableOpacity style={styles.monthNavArrowBtn} onPress={handleNextMonth} activeOpacity={0.7}>
+                <ChevronRight size={18} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* 7-Day Date Carousel */}
-          <View style={styles.carouselContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselContent}>
-              {carouselDates.map((dObj, idx) => {
-                const dStr = getLocalDateStr(dObj);
-                const isSelected = dStr === selectedDateStr;
-                const isToday = dStr === todayStr;
-                const dayName = dObj.toLocaleDateString('en-US', { weekday: 'short' });
-                const dayNum = dObj.getDate();
-                const dTasks = (tasks || []).filter(t => t.dateStr === dStr);
-                const hasDone = dTasks.some(t => t.completed);
+          {/* Month Calendar Grid */}
+          <View style={styles.calendarSection}>
+            <View style={styles.weekdayHeaderRow}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                <Text key={idx} style={styles.weekdayLabel}>{day}</Text>
+              ))}
+            </View>
+
+            <View style={styles.monthGridContainer}>
+              {monthGridDays.map((item, idx) => {
+                const dateStr = getLocalDateStr(item.dateObj);
+                const isToday = dateStr === todayStr;
+                const isSelected = dateStr === selectedDateStr;
+
+                const currentDayTasks = (tasks || []).filter(t => t.dateStr === dateStr);
+                const { score, colorState } = calculateDayProductivityScore(currentDayTasks);
 
                 return (
                   <TouchableOpacity
                     key={idx}
                     style={[
-                      styles.carouselCard,
-                      isSelected && styles.carouselCardActive,
-                      isToday && !isSelected && styles.carouselCardToday,
+                      styles.monthGridCell,
+                      !item.isCurrentMonth && styles.monthGridCellDim,
+                      isToday && styles.monthGridCellToday,
+                      isSelected && !isToday && styles.monthGridCellSelected,
                     ]}
                     onPress={() => {
                       triggerHaptic.lightImpact();
-                      setSelectedDate(dObj);
+                      setSelectedDate(item.dateObj);
+                      setViewMode('timeline');
                     }}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.carouselDayName, isSelected && styles.carouselTextActive]}>
-                      {dayName}
-                    </Text>
-                    <Text style={[styles.carouselDayNum, isSelected && styles.carouselTextActive, isToday && !isSelected && styles.carouselDayNumToday]}>
-                      {dayNum}
+                    <Text
+                      style={[
+                        styles.monthCellDateText,
+                        !item.isCurrentMonth && styles.monthCellDateDimText,
+                        isToday && styles.monthCellDateTodayText,
+                        isSelected && !isToday && styles.monthCellDateSelectedText,
+                      ]}
+                    >
+                      {item.dateNum}
                     </Text>
 
-                    {hasDone ? (
-                      <View style={styles.carouselDoneDot} />
-                    ) : dTasks.length > 0 ? (
-                      <View style={styles.carouselPendingDot} />
-                    ) : null}
+                    {/* Productivity Score Written Below the Date */}
+                    <View
+                      style={[
+                        styles.scoreBadgePill,
+                        colorState === 'good' && styles.scoreGoodBg,
+                        colorState === 'avg' && styles.scoreAvgBg,
+                        colorState === 'worse' && styles.scoreWorseBg,
+                        colorState === 'empty' && styles.scoreEmptyBg,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.scoreBadgeText,
+                          colorState === 'good' && styles.scoreGoodText,
+                          colorState === 'avg' && styles.scoreAvgText,
+                          colorState === 'worse' && styles.scoreWorseText,
+                          colorState === 'empty' && styles.scoreEmptyText,
+                        ]}
+                      >
+                        {score > 0 ? `${score}%` : '0%'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* VIEW 2: 24-HOUR DYNAMIC TIMELINE PAGE */}
+      {viewMode === 'timeline' && (
+        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Sticky Reduced-Height Date Header (Sat 1) */}
+          <View style={styles.stickyTimelineDateHeaderBox}>
+            <Text style={styles.timelineDayNameText}>
+              {selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}
+            </Text>
+            <Text style={styles.timelineDateNumText}>
+              {selectedDate.getDate()}
+            </Text>
           </View>
 
-          {/* Schedule Sub-Tabs Filter */}
-          <View style={styles.subTabRow}>
-            {[
-              { id: 'all', label: 'All', count: countAll },
-              { id: 'upcoming', label: 'Upcoming', count: countUpcoming },
-              { id: 'completed', label: 'Done', count: countCompleted },
-              { id: 'missed', label: 'Missed', count: countMissed },
-            ].map(tabItem => {
-              const isActive = scheduleSubTab === tabItem.id;
-              return (
-                <TouchableOpacity
-                  key={tabItem.id}
-                  style={[styles.subTabPill, isActive && styles.subTabPillActive]}
-                  onPress={() => {
-                    triggerHaptic.lightImpact();
-                    setScheduleSubTab(tabItem.id as any);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.subTabLabel, isActive && styles.subTabLabelActive]}>
-                    {tabItem.label}
-                  </Text>
-                  <View style={[styles.subTabBadge, isActive ? styles.subTabBadgeActive : styles.subTabBadgeInactive]}>
-                    <Text style={[styles.subTabBadgeText, isActive ? styles.subTabBadgeTextActive : styles.subTabBadgeTextInactive]}>
-                      {tabItem.count}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <ScrollView style={styles.mainScrollView} showsVerticalScrollIndicator={false}>
+            <View style={styles.timelinePageContainer}>
+              {/* Dynamic Time Segments */}
+              <View style={styles.timeStripContainer}>
+                {timelineSegments.map((seg, idx) => {
+                  const startLabel = formatDecimalHourLabel(seg.startDec);
+                  const durationHours = seg.endDec - seg.startDec;
+                  // Base scale: 64px per hour. Longer slots (> 1 hr) scale proportionally taller!
+                  const baseHourHeight = 64;
+                  const calculatedHeight = Math.max(44, Math.round(durationHours * baseHourHeight));
+                  const task = seg.task;
+                  const catStyle = task ? getCatStyle(categories, task.category) : null;
+                  const catName = task ? getCategoryName(categories, task.category) : '';
+                  const showCatName = catName && catName !== 'cat-work' && catName.toLowerCase() !== 'work';
 
-          {/* Tasks List */}
-          <View style={styles.taskListContainer}>
-            {filteredTasks.length === 0 ? (
-              <View style={styles.emptyStateCard}>
-                <CheckSquare size={36} color="#94A3B8" style={{ marginBottom: 10 }} />
-                <Text style={styles.emptyStateTitle}>No Tasks Scheduled</Text>
-                <Text style={styles.emptyStateSubtitle}>
-                  {scheduleSubTab === 'all'
-                    ? 'No tasks created for this date. Tap + Task to add your first item!'
-                    : `No ${scheduleSubTab} tasks found for this date.`}
-                </Text>
-                <TouchableOpacity style={styles.emptyStateBtn} onPress={onAddTask} activeOpacity={0.85}>
-                  <Plus size={15} color="#FFFFFF" />
-                  <Text style={styles.emptyStateBtnText}>Add Task</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              filteredTasks.map(task => {
-                const catStyle = getCatStyle(categories, task.category);
+                  return (
+                    <View key={idx} style={[styles.slotHourBlock, { minHeight: calculatedHeight }]}>
+                      {/* Time Label on Left */}
+                      <View style={styles.timeLabelContainer}>
+                        <Text style={styles.cleanTimeLabelText}>{startLabel}</Text>
+                      </View>
 
-                return (
-                  <View key={task.id} style={styles.taskCard}>
-                    {/* Category color bar accent */}
-                    <View style={[styles.categoryBarAccent, { backgroundColor: catStyle.bar }]} />
+                      {/* Strip with Proportional Dynamic Height Scaling according to Task Duration */}
+                      <TouchableOpacity
+                        style={[
+                          styles.whiteSlotStrip,
+                          { minHeight: calculatedHeight },
+                          task && catStyle ? { backgroundColor: catStyle.bg } : { backgroundColor: '#FFFFFF' },
+                        ]}
+                        onPress={() => {
+                          if (task) {
+                            triggerHaptic.lightImpact();
+                            setSelectedDetailTask(task);
+                          } else {
+                            handleOpenSegmentAddTask(seg.startDec, seg.endDec);
+                          }
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        {task && catStyle ? (
+                          <View style={styles.taskStripInnerRow}>
+                            <View style={styles.slotTaskInfo}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text
+                                  style={[
+                                    styles.slotTaskTitle,
+                                    task.completed && styles.taskCompletedStrike,
+                                  ]}
+                                  numberOfLines={durationHours >= 1.5 ? 2 : 1}
+                                >
+                                  {task.title}
+                                </Text>
 
-                    {/* Task Content */}
-                    <View style={styles.taskCardBody}>
-                      <View style={styles.taskCardHeader}>
-                        {/* Checkbox */}
-                        <TouchableOpacity
-                          style={[
-                            styles.checkboxBtn,
-                            task.completed && { backgroundColor: catStyle.bar, borderColor: catStyle.bar },
-                          ]}
-                          onPress={() => handleAttemptComplete(task)}
-                          activeOpacity={0.8}
-                        >
-                          {task.completed && <Check size={14} color="#FFFFFF" />}
-                        </TouchableOpacity>
+                                {/* Timer Required Icon */}
+                                {task.requiresTimer && (
+                                  <View style={styles.timerRequiredBadge}>
+                                    <Timer size={12} color="#2563EB" />
+                                  </View>
+                                )}
+                              </View>
 
-                        {/* Title & Category Pill */}
-                        <View style={{ flex: 1, marginLeft: 12 }}>
-                          <View style={styles.titleCatRow}>
-                            <Text
-                              style={[
-                                styles.taskTitleText,
-                                task.completed && styles.taskCompletedStrike,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {task.title}
-                            </Text>
-                            <View style={[styles.categoryPill, { backgroundColor: catStyle.bg }]}>
-                              <Text style={[styles.categoryPillText, { color: catStyle.text }]}>
-                                {task.category}
+                              <Text style={styles.slotTaskMeta}>
+                                {task.startTime || startLabel} {task.endTime ? `- ${task.endTime}` : ''}{showCatName ? ` • ${catName}` : ''}
                               </Text>
                             </View>
-                          </View>
 
-                          {/* Time & Meta info */}
-                          <View style={styles.taskMetaRow}>
-                            <Clock size={12} color="#64748B" />
-                            <Text style={styles.taskMetaText}>
-                              {task.startTime || 'Scheduled'} {task.endTime ? `- ${task.endTime}` : ''} ({task.durationMins || 60}m)
-                            </Text>
+                            <TouchableOpacity
+                              style={[
+                                styles.slotCheckBtn,
+                                task.completed && { backgroundColor: catStyle.bar, borderColor: catStyle.bar },
+                              ]}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleAttemptComplete(task);
+                              }}
+                            >
+                              {task.completed && <Check size={12} color="#FFFFFF" />}
+                            </TouchableOpacity>
 
-                            {task.requiresTimer && (
-                              <View style={styles.timerBadge}>
-                                <Clock size={10} color="#2563EB" />
-                                <Text style={styles.timerBadgeText}>Timer Required</Text>
-                              </View>
-                            )}
+                            <TouchableOpacity
+                              style={styles.slotDeleteBtn}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTask(task.id);
+                              }}
+                            >
+                              <Trash2 size={13} color="#94A3B8" />
+                            </TouchableOpacity>
                           </View>
-                        </View>
+                        ) : null}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+
+                {/* Final End Label */}
+                <View style={styles.timeLabelContainer}>
+                  <Text style={styles.cleanTimeLabelText}>12 am</Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Redesigned Add Task / Event Bottom Sheet Modal (Soft Fill Input Fields, Top Save Button) */}
+      <BottomSheet
+        visible={showAddEventSheet}
+        onClose={() => setShowAddEventSheet(false)}
+        snapPoints={['92%']}
+        theme={theme}
+      >
+        {({ scrollEnabled, onScroll, closeSheet }) => (
+          <View style={{ flex: 1, paddingHorizontal: 16 }}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Add Task</Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
+              </View>
+
+              {/* Save Button moved to Top Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <TouchableOpacity style={styles.topSaveBtnPill} onPress={handleSaveEvent} activeOpacity={0.85}>
+                  <Text style={styles.topSaveBtnText}>Save</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={closeSheet} style={styles.modalCloseBtn}>
+                  <X size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              scrollEnabled={scrollEnabled}
+              onScroll={onScroll}
+              scrollEventThrottle={16}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.inputLabel}>Task Title *</Text>
+              <TextInput
+                style={styles.inputField}
+                placeholder="e.g. Solve 2 LeetCode Problems"
+                placeholderTextColor="#94A3B8"
+                value={eventTitle}
+                onChangeText={setEventTitle}
+                autoFocus
+              />
+
+              {/* Starting Time & Ending Time */}
+              <View style={styles.timePickersRow}>
+                <View style={{ flex: 1, marginRight: 6 }}>
+                  <Text style={styles.inputLabel}>Start Time</Text>
+                  <TouchableOpacity
+                    style={styles.timeCardBox}
+                    onPress={() => {
+                      triggerHaptic.lightImpact();
+                      setTimePickerTarget('start');
+                      setTimePickerVisible(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Clock size={16} color="#2563EB" />
+                    <Text style={styles.timeDisplayText}>{startTimeStr || 'Select Time'}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 6 }}>
+                  <Text style={styles.inputLabel}>End Time</Text>
+                  <TouchableOpacity
+                    style={styles.timeCardBox}
+                    onPress={() => {
+                      triggerHaptic.lightImpact();
+                      setTimePickerTarget('end');
+                      setTimePickerVisible(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Clock size={16} color="#2563EB" />
+                    <Text style={styles.timeDisplayText}>{endTimeStr || 'Select Time'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Category Chooser */}
+              <Text style={styles.inputLabel}>Category</Text>
+              <View style={styles.categoryWrapRow}>
+                {(categories || []).map((cat) => {
+                  const isCatSelected = eventCategory === cat.id;
+                  const catColor = cat.color || '#2563EB';
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.catChoiceChip,
+                        isCatSelected
+                          ? { backgroundColor: catColor }
+                          : { backgroundColor: '#F1F5F9' },
+                      ]}
+                      onPress={() => setEventCategory(cat.id as TaskCategory)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.catChoiceChipText,
+                          isCatSelected ? { color: '#FFFFFF' } : { color: '#334155' },
+                        ]}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Additional Options */}
+              <View style={styles.optionsSectionGroup}>
+                {/* Is Timer Required Toggle */}
+                <View style={styles.toggleSettingRow}>
+                  <View style={styles.toggleLabelGroup}>
+                    <Timer size={18} color="#2563EB" />
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={styles.toggleSettingTitle}>Is Timer Required?</Text>
+                      <Text style={styles.toggleSettingSubText}>Requires focus timer to mark completed</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.customTogglePill, eventRequiresTimer && styles.customTogglePillActive]}
+                    onPress={() => {
+                      triggerHaptic.lightImpact();
+                      setEventRequiresTimer(!eventRequiresTimer);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.customToggleCircle, eventRequiresTimer && styles.customToggleCircleActive]} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Notification Enabled Toggle */}
+                <View style={styles.toggleSettingRow}>
+                  <View style={styles.toggleLabelGroup}>
+                    {eventNotificationEnabled ? <Bell size={18} color="#2563EB" /> : <BellOff size={18} color="#94A3B8" />}
+                    <View style={{ marginLeft: 10 }}>
+                      <Text style={styles.toggleSettingTitle}>Enable Notification</Text>
+                      <Text style={styles.toggleSettingSubText}>Send reminder when task starts</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.customTogglePill, eventNotificationEnabled && styles.customTogglePillActive]}
+                    onPress={() => {
+                      triggerHaptic.lightImpact();
+                      setEventNotificationEnabled(!eventNotificationEnabled);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.customToggleCircle, eventNotificationEnabled && styles.customToggleCircleActive]} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        )}
+      </BottomSheet>
+
+      {/* Task Details Bottom Sheet Modal (Opened on clicking any task) */}
+      <BottomSheet
+        visible={!!selectedDetailTask}
+        onClose={() => setSelectedDetailTask(null)}
+        snapPoints={['65%']}
+        theme={theme}
+      >
+        {({ closeSheet }) => (
+          <View style={{ flex: 1, paddingHorizontal: 16 }}>
+            {selectedDetailTask && (
+              <>
+                <View style={styles.modalHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalTitle}>Task Details</Text>
+                    <Text style={styles.modalSubtitle}>Scheduled Event Summary</Text>
+                  </View>
+                  <TouchableOpacity onPress={closeSheet} style={styles.modalCloseBtn}>
+                    <X size={20} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 12 }}>
+                  {/* Task Header Summary Banner */}
+                  <View style={styles.detailTitleCard}>
+                    <Text style={styles.detailTitleText}>{selectedDetailTask.title}</Text>
+                    <View style={styles.detailBadgesRow}>
+                      <View
+                        style={[
+                          styles.detailCategoryBadge,
+                          { backgroundColor: getCategoryLightBg(getCategoryColor(categories, selectedDetailTask.category)) }
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.detailCategoryBadgeText,
+                            { color: getCategoryTextColor(getCategoryColor(categories, selectedDetailTask.category)) }
+                          ]}
+                        >
+                          {getCategoryName(categories, selectedDetailTask.category)}
+                        </Text>
                       </View>
 
-                      {/* Card Actions Footer */}
-                      <View style={styles.taskCardFooter}>
-                        {task.requiresTimer && onStartTaskTimer && !task.completed && (
-                          <TouchableOpacity
-                            style={styles.startTimerBtn}
-                            onPress={() => {
-                              triggerHaptic.lightImpact();
-                              onStartTaskTimer(task);
-                            }}
-                            activeOpacity={0.8}
-                          >
-                            <Play size={12} color="#2563EB" />
-                            <Text style={styles.startTimerBtnText}>Start Pomodoro</Text>
-                          </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                          style={styles.deleteTaskBtn}
-                          onPress={() => handleDeleteTask(task.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Trash2 size={15} color="#94A3B8" />
-                        </TouchableOpacity>
+                      <View style={[styles.detailStatusBadge, selectedDetailTask.completed && styles.detailStatusCompletedBg]}>
+                        <Text style={[styles.detailStatusBadgeText, selectedDetailTask.completed && styles.detailStatusCompletedText]}>
+                          {selectedDetailTask.completed ? 'Completed' : 'Pending'}
+                        </Text>
                       </View>
                     </View>
                   </View>
-                );
-              })
-            )}
-          </View>
-        </ScrollView>
-      )}
 
-      {/* 3. MONTH OVERVIEW CALENDAR VIEW */}
-      {viewMode === 'month' && (
-        <ScrollView style={styles.monthViewContainer} showsVerticalScrollIndicator={false}>
-          {/* Month Navigation */}
-          <View style={styles.monthNavHeader}>
-            <TouchableOpacity style={styles.navArrowBtn} onPress={handlePrevMonth} activeOpacity={0.7}>
-              <ChevronLeft size={20} color="#0F172A" />
-            </TouchableOpacity>
-
-            <Text style={styles.monthNavTitle}>{monthYearHeader}</Text>
-
-            <TouchableOpacity style={styles.navArrowBtn} onPress={handleNextMonth} activeOpacity={0.7}>
-              <ChevronRight size={20} color="#0F172A" />
-            </TouchableOpacity>
-
-            {!isSelectedToday && (
-              <TouchableOpacity style={styles.todayPillBtn} onPress={handleTodayClick} activeOpacity={0.8}>
-                <Text style={styles.todayPillText}>Today</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Weekday Labels */}
-          <View style={styles.weekdayHeaderRow}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-              <Text key={idx} style={styles.weekdayLabel}>
-                {day}
-              </Text>
-            ))}
-          </View>
-
-          {/* Month Grid */}
-          <View style={styles.monthGridContainer}>
-            {monthGridDays.map((item, idx) => {
-              const dateStr = getLocalDateStr(item.dateObj);
-              const isToday = dateStr === todayStr;
-              const isSelected = dateStr === selectedDateStr;
-
-              const dayTasks = (tasks || []).filter(t => t.dateStr === dateStr);
-              const completedCount = dayTasks.filter(t => t.completed).length;
-              const isDone = completedCount > 0;
-
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.monthGridCell,
-                    isDone && styles.monthGridCellDone,
-                    isToday && styles.monthGridCellToday,
-                    isSelected && !isToday && styles.monthGridCellSelected,
-                  ]}
-                  onPress={() => {
-                    triggerHaptic.mediumImpact();
-                    setSelectedDate(item.dateObj);
-                    setViewMode('day');
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.monthCellDateText,
-                      !item.isCurrentMonth && styles.monthCellDateDim,
-                      isToday && styles.monthCellDateToday,
-                    ]}
-                  >
-                    {item.dateNum}
-                  </Text>
-
-                  {isDone ? (
-                    <View style={styles.monthDoneBadge}>
-                      <Flame size={10} color="#92400E" />
-                      <Text style={styles.monthDoneBadgeText}>{completedCount}</Text>
+                  {/* Task Info Field Group */}
+                  <View style={styles.detailInfoBoxGroup}>
+                    {/* Time */}
+                    <View style={styles.detailInfoRow}>
+                      <View style={styles.detailInfoLeft}>
+                        <Clock size={17} color="#2563EB" />
+                        <Text style={styles.detailInfoLabel}>Scheduled Time</Text>
+                      </View>
+                      <Text style={styles.detailInfoValue}>
+                        {selectedDetailTask.startTime} - {selectedDetailTask.endTime} ({selectedDetailTask.durationMins}m)
+                      </Text>
                     </View>
-                  ) : isToday ? (
-                    <View style={styles.todayDotIndicator} />
-                  ) : dayTasks.length > 0 ? (
-                    <View style={styles.pendingDotIndicator} />
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
+
+                    {/* Timer Required */}
+                    <View style={styles.detailInfoRow}>
+                      <View style={styles.detailInfoLeft}>
+                        <Timer size={17} color="#2563EB" />
+                        <Text style={styles.detailInfoLabel}>Timer Required</Text>
+                      </View>
+                      <Text style={[styles.detailInfoValue, selectedDetailTask.requiresTimer ? { color: '#2563EB' } : { color: '#64748B' }]}>
+                        {selectedDetailTask.requiresTimer ? 'Yes (Timer Enabled)' : 'No'}
+                      </Text>
+                    </View>
+
+                    {/* Notification Status */}
+                    <View style={styles.detailInfoRow}>
+                      <View style={styles.detailInfoLeft}>
+                        {selectedDetailTask.notificationEnabled !== false ? (
+                          <Bell size={17} color="#10B981" />
+                        ) : (
+                          <BellOff size={17} color="#94A3B8" />
+                        )}
+                        <Text style={styles.detailInfoLabel}>Notification</Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.detailInfoValue,
+                          selectedDetailTask.notificationEnabled !== false ? { color: '#10B981' } : { color: '#64748B' }
+                        ]}
+                      >
+                        {selectedDetailTask.notificationEnabled !== false ? 'Enabled' : 'Disabled'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View style={styles.detailActionBtnsRow}>
+                    <TouchableOpacity
+                      style={[styles.detailToggleCompleteBtn, selectedDetailTask.completed && styles.detailToggleCompletedActive]}
+                      onPress={() => {
+                        triggerHaptic.mediumImpact();
+                        handleAttemptComplete(selectedDetailTask);
+                        closeSheet();
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <CheckCircle2 size={16} color={selectedDetailTask.completed ? '#10B981' : '#FFFFFF'} />
+                      <Text style={[styles.detailToggleCompleteText, selectedDetailTask.completed && { color: '#10B981' }]}>
+                        {selectedDetailTask.completed ? 'Completed' : 'Mark Complete'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.detailDeleteBtn}
+                      onPress={() => {
+                        triggerHaptic.heavyImpact();
+                        handleDeleteTask(selectedDetailTask.id);
+                        closeSheet();
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Trash2 size={16} color="#EF4444" />
+                      <Text style={styles.detailDeleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </>
+            )}
           </View>
-        </ScrollView>
-      )}
+        )}
+      </BottomSheet>
 
       {/* Task Verification Modal */}
       {verifyingTask && (
@@ -733,6 +926,21 @@ export const DailyPlanner: React.FC<Props> = ({
           </View>
         </Modal>
       )}
+
+      {/* Visual Google-Style Time Picker Modal */}
+      <TimePickerModal
+        visible={timePickerVisible}
+        initialTimeStr={timePickerTarget === 'start' ? startTimeStr : endTimeStr}
+        title={timePickerTarget === 'start' ? 'Select Task Start Time' : 'Select Task End Time'}
+        onSelectTime={(timeStr) => {
+          if (timePickerTarget === 'start') {
+            setStartTimeStr(timeStr);
+          } else {
+            setEndTimeStr(timeStr);
+          }
+        }}
+        onClose={() => setTimePickerVisible(false)}
+      />
     </View>
   );
 };
@@ -740,516 +948,611 @@ export const DailyPlanner: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 12 : 16,
-    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
+  },
+
+  // 1. Top Header Row
+  topHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 18 : 18,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+  },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerBackBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    marginRight: 10,
+  },
+  headerTodayPillRight: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  headerTodayDateNum: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 15,
+    color: '#2563EB',
   },
   headerTitle: {
     fontFamily: FONTS.displayBold,
-    fontSize: 22,
+    fontSize: 18,
     color: '#0F172A',
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  headerRightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    padding: 3,
-  },
-  segmentedPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 9,
-  },
-  segmentedPillActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  segmentedPillText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  segmentedPillTextActive: {
-    color: '#1A73E8',
-  },
-  softAddTaskBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  softAddTaskBtnText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 13,
-    color: '#2563EB',
-  },
-  dayViewScroll: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-  },
-  dateNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
-  },
-  navArrowBtn: {
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  dateDisplayPill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  dateDisplayText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 14,
-    color: '#0F172A',
-  },
-  todayPillBtn: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  todayPillText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 12,
-    color: '#2563EB',
-  },
-  carouselContainer: {
-    marginBottom: 16,
-  },
-  carouselContent: {
-    gap: 8,
-    paddingRight: 16,
-  },
-  carouselCard: {
-    width: 58,
-    height: 68,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  carouselCardActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  carouselCardToday: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-  },
-  carouselDayName: {
-    fontFamily: FONTS.groteskMedium,
     fontSize: 11,
     color: '#64748B',
-  },
-  carouselDayNum: {
-    fontFamily: FONTS.displayBold,
-    fontSize: 16,
-    color: '#0F172A',
     marginTop: 2,
   },
-  carouselDayNumToday: {
-    color: '#2563EB',
-  },
-  carouselTextActive: {
-    color: '#FFFFFF',
-  },
-  carouselDoneDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#10B981',
-    marginTop: 4,
-  },
-  carouselPendingDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#F59E0B',
-    marginTop: 4,
-  },
-  subTabRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  subTabPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  subTabPillActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-  },
-  subTabLabel: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  subTabLabelActive: {
-    color: '#2563EB',
-  },
-  subTabBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  subTabBadgeActive: {
-    backgroundColor: '#2563EB',
-  },
-  subTabBadgeInactive: {
-    backgroundColor: '#F1F5F9',
-  },
-  subTabBadgeText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 10,
-  },
-  subTabBadgeTextActive: {
-    color: '#FFFFFF',
-  },
-  subTabBadgeTextInactive: {
-    color: '#64748B',
-  },
-  taskListContainer: {
-    paddingBottom: 40,
-  },
-  emptyStateCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 32,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  emptyStateTitle: {
-    fontFamily: FONTS.displayBold,
-    fontSize: 16,
-    color: '#0F172A',
-  },
-  emptyStateSubtitle: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  emptyStateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  emptyStateBtnText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 13,
-    color: '#FFFFFF',
-  },
-  taskCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  categoryBarAccent: {
-    width: 6,
-  },
-  taskCardBody: {
+
+  mainScrollView: {
     flex: 1,
-    padding: 14,
+    backgroundColor: '#F8FAFC',
   },
-  taskCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  checkboxBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#94A3B8',
+
+  // 2. Month Navigation Header
+  monthNavWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
   },
-  titleCatRow: {
+  monthNavPill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    width: '100%',
+    maxWidth: 320,
   },
-  taskTitleText: {
+  monthNavArrowBtn: {
+    padding: 6,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  monthNavTitle: {
     fontFamily: FONTS.groteskBold,
     fontSize: 15,
     color: '#0F172A',
-    flex: 1,
+    letterSpacing: -0.2,
   },
-  taskCompletedStrike: {
-    textDecorationLine: 'line-through',
-    color: '#94A3B8',
-  },
-  categoryPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  categoryPillText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 10,
-  },
-  taskMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-  },
-  taskMetaText: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  timerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  timerBadgeText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 10,
-    color: '#2563EB',
-  },
-  taskCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F8FAFC',
-  },
-  startTimerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  startTimerBtnText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 11,
-    color: '#2563EB',
-  },
-  deleteTaskBtn: {
-    padding: 6,
-    marginLeft: 'auto',
-  },
-  monthViewContainer: {
-    flex: 1,
+
+  // 3. Calendar Section
+  calendarSection: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-  },
-  monthNavHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  monthNavTitle: {
-    fontFamily: FONTS.displayBold,
-    fontSize: 17,
-    color: '#0F172A',
+    paddingBottom: 24,
+    backgroundColor: '#FFFFFF',
   },
   weekdayHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     marginBottom: 8,
+    paddingHorizontal: 4,
   },
   weekdayLabel: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 12,
-    color: '#64748B',
     width: '14.28%',
     textAlign: 'center',
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 12,
+    color: '#94A3B8',
   },
   monthGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 6,
-    marginBottom: 40,
   },
   monthGridCell: {
-    width: '14.28%',
-    height: 52,
-    borderRadius: 10,
+    width: '13.5%',
+    margin: '0.39%',
+    minHeight: 68, // Increased height of date cell
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 2,
+    justifyContent: 'space-between',
+    borderWidth: 0,
   },
-  monthGridCellDone: {
-    backgroundColor: '#FEF3C7',
+  monthGridCellDim: {
+    backgroundColor: '#FAFAFA',
   },
   monthGridCellToday: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
+    backgroundColor: '#E0F2FE',
   },
   monthGridCellSelected: {
-    borderWidth: 2,
-    borderColor: '#7C3AED',
+    backgroundColor: '#DBEAFE',
   },
   monthCellDateText: {
     fontFamily: FONTS.groteskBold,
     fontSize: 13,
-    color: '#334155',
-  },
-  monthCellDateDim: {
-    color: '#CBD5E1',
-  },
-  monthCellDateToday: {
-    color: '#1D4ED8',
-  },
-  monthDoneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
+    color: '#0F172A',
     marginTop: 2,
   },
-  monthDoneBadgeText: {
+  monthCellDateDimText: {
+    color: '#CBD5E1',
+  },
+  monthCellDateTodayText: {
+    color: '#0284C7',
+  },
+  monthCellDateSelectedText: {
+    color: '#1E40AF',
+  },
+
+  // Productivity Score Badges Below Date
+  scoreBadgePill: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    marginBottom: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '92%',
+  },
+  scoreGoodBg: {
+    backgroundColor: '#DCFCE7',
+  },
+  scoreGoodText: {
+    color: '#15803D',
+  },
+  scoreAvgBg: {
+    backgroundColor: '#FEF3C7',
+  },
+  scoreAvgText: {
+    color: '#B45309',
+  },
+  scoreWorseBg: {
+    backgroundColor: '#FEE2E2',
+  },
+  scoreWorseText: {
+    color: '#B91C1C',
+  },
+  scoreEmptyBg: {
+    backgroundColor: '#F1F5F9',
+  },
+  scoreEmptyText: {
+    color: '#94A3B8',
+  },
+  scoreBadgeText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 10,
-    color: '#92400E',
+    fontSize: 9.5,
   },
   todayDotIndicator: {
     width: 5,
     height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#2563EB',
-    marginTop: 4,
+    borderRadius: 3,
+    backgroundColor: '#0284C7',
+    marginTop: 6,
   },
-  pendingDotIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#F59E0B',
-    marginTop: 4,
+
+  // 4. Sticky Date Header & Dynamic Timeline View
+  stickyTimelineDateHeaderBox: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  modalOverlay: {
+  timelineDayNameText: {
+    fontFamily: FONTS.groteskSemibold,
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 14,
+  },
+  timelineDateNumText: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 20,
+    color: '#0F172A',
+    lineHeight: 22,
+  },
+  timelinePageContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 40,
+    backgroundColor: '#F8FAFC',
+  },
+  timeStripContainer: {
+    backgroundColor: '#F8FAFC',
+  },
+  slotHourBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  timeLabelContainer: {
+    width: 44,
+    paddingTop: 2,
+  },
+  cleanTimeLabelText: {
+    fontFamily: FONTS.groteskSemibold,
+    fontSize: 11,
+    color: '#475569',
+    textAlign: 'left',
+  },
+  whiteSlotStrip: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    borderWidth: 0,
+  },
+
+  // Task Inner Content
+  taskStripInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  slotTaskInfo: {
+    flex: 1,
+  },
+  slotTaskTitle: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  slotTaskMeta: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  taskCompletedStrike: {
+    textDecorationLine: 'line-through',
+    opacity: 0.6,
+  },
+  slotCheckBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    marginLeft: 8,
   },
-  modalCard: {
-    width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
+  slotDeleteBtn: {
+    padding: 6,
+    marginLeft: 6,
+  },
+
+  // Modal / Bottom Sheet (Soft Fill Fields, No Borders)
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   modalTitle: {
     fontFamily: FONTS.displayBold,
     fontSize: 17,
     color: '#0F172A',
-    marginBottom: 6,
   },
-  modalBody: {
+  modalSubtitle: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  modalScrollContent: {
+    paddingTop: 12,
+    paddingBottom: 70,
+  },
+  inputLabel: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#334155',
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  inputField: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 0,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  timePickersRow: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  timeCardBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 0,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  timeDisplayText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13,
+    color: '#2563EB',
+    marginLeft: 8,
+  },
+  categoryWrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  catChoiceChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 0,
+  },
+  catChoiceChipText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+  },
+  saveTaskBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  saveTaskBtnText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  topSaveBtnPill: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topSaveBtnText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  timerRequiredBadge: {
+    backgroundColor: '#EFF6FF',
+    padding: 3,
+    borderRadius: 6,
+  },
+  optionsSectionGroup: {
+    marginTop: 18,
+    gap: 12,
+  },
+  toggleSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 14,
+  },
+  toggleLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  toggleSettingTitle: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  toggleSettingSubText: {
+    fontFamily: FONTS.groteskRegular,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  customTogglePill: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#CBD5E1',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  customTogglePillActive: {
+    backgroundColor: '#2563EB',
+  },
+  customToggleCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  customToggleCircleActive: {
+    alignSelf: 'flex-end',
+  },
+  detailTitleCard: {
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 14,
+  },
+  detailTitleText: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 16,
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  detailBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailCategoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  detailCategoryBadgeText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 11,
+  },
+  detailStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#FEF3C7',
+  },
+  detailStatusCompletedBg: {
+    backgroundColor: '#DCFCE7',
+  },
+  detailStatusBadgeText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 11,
+    color: '#B45309',
+  },
+  detailStatusCompletedText: {
+    color: '#15803D',
+  },
+  detailInfoBoxGroup: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    padding: 12,
+    gap: 12,
+    marginBottom: 16,
+  },
+  detailInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailInfoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailInfoLabel: {
     fontFamily: FONTS.groteskMedium,
     fontSize: 13,
     color: '#475569',
+  },
+  detailInfoValue: {
+    fontFamily: FONTS.groteskSemibold,
+    fontSize: 12.5,
+    color: '#0F172A',
+  },
+  detailActionBtnsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  detailToggleCompleteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  detailToggleCompletedActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  detailToggleCompleteText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13.5,
+    color: '#FFFFFF',
+  },
+  detailDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  detailDeleteBtnText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13.5,
+    color: '#EF4444',
+  },
+
+  // Verification Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  modalBody: {
+    fontFamily: FONTS.groteskRegular,
+    fontSize: 13,
+    color: '#64748B',
     textAlign: 'center',
-    marginBottom: 18,
-    lineHeight: 18,
+    marginVertical: 12,
   },
   modalPrimaryBtn: {
     backgroundColor: '#2563EB',
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: 20,
     width: '100%',
     alignItems: 'center',
-    marginBottom: 8,
+    marginTop: 8,
   },
   modalPrimaryBtnText: {
     fontFamily: FONTS.groteskBold,
+    fontSize: 14,
     color: '#FFFFFF',
-    fontSize: 13,
   },
   modalSecondaryBtn: {
     paddingVertical: 10,
-    alignItems: 'center',
-    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 6,
   },
   modalSecondaryBtnText: {
-    fontFamily: FONTS.groteskMedium,
+    fontFamily: FONTS.groteskBold,
+    fontSize: 13,
     color: '#64748B',
-    fontSize: 12,
   },
 });

@@ -161,24 +161,24 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   label: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 11,
-    marginTop: 12,
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 12,
+    marginTop: 14,
     marginBottom: 6,
-    color: '#475569',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    color: '#49454F',
+    letterSpacing: 0.5,
   },
   input: {
     fontFamily: FONTS.groteskMedium,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    // M3 Outlined Text Field: extraSmall radius (4dp), outline border
+    borderRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 14,
     borderWidth: 1,
-    backgroundColor: '#F8FAFC',
-    color: '#0F172A',
-    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    color: '#1C1B1F',
+    borderColor: '#CAC4D0',
   },
   catRow: {
     flexDirection: 'row',
@@ -187,21 +187,25 @@ const styles = StyleSheet.create({
   catChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    // M3 Filter Chip: small radius (8dp), outlined inactive
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 8,
+    borderWidth: 1,
     marginRight: 8,
     gap: 6,
+    height: 32,
   },
   catChipInactive: {
+    // M3 Filter Chip inactive: surfaceVariant bg, outline border
     backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
+    borderColor: '#CAC4D0',
   },
   catText: {
     fontFamily: FONTS.groteskMedium,
-    fontSize: 13,
-    color: '#475569',
+    fontSize: 14,
+    letterSpacing: 0.1,
+    color: '#49454F',
   },
   durGrid: {
     flexDirection: 'row',
@@ -210,37 +214,48 @@ const styles = StyleSheet.create({
   durPill: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: '#F8FAFC',
+    paddingVertical: 8,
+    // M3 Suggestion Chip: full pill radius
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CAC4D0',
   },
   durPillActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
+    // M3 selected Suggestion Chip: primaryContainer bg, no border
+    backgroundColor: '#E8EAF6',
+    borderColor: '#E8EAF6',
   },
   durText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 12,
-    color: '#475569',
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 14,
+    letterSpacing: 0.1,
+    color: '#49454F',
   },
   durTextActive: {
-    color: '#FFFFFF',
+    fontFamily: FONTS.groteskBold,
+    // M3 onPrimaryContainer for active suggestion chip text
+    color: '#1A1B52',
   },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    paddingVertical: 14,
-    marginTop: 20,
+    // M3 Filled Button: full pill (20dp), primary bg, 40dp height
+    borderRadius: 20,
+    paddingVertical: 10,
+    marginTop: 24,
     backgroundColor: '#2563EB',
-    gap: 6,
+    gap: 8,
+    // M3 elevation level 0 (no shadow on filled buttons at rest)
+    elevation: 0,
+    shadowOpacity: 0,
   },
   submitText: {
     fontFamily: FONTS.groteskBold,
     color: '#FFFFFF',
+    // M3 labelLarge: 14sp, medium weight, +0.1 tracking
     fontSize: 14,
+    letterSpacing: 0.1,
   },
 });

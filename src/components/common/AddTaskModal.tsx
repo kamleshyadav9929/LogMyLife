@@ -7,6 +7,7 @@ import { triggerHaptic } from '../../services/haptics';
 import { X, Plus, Clock } from 'lucide-react-native';
 import { BottomSheet } from './BottomSheet';
 import { CategoryIcon } from './CategoryIcon';
+import { TimePickerModal } from './TimePickerModal';
 
 interface Props {
   visible: boolean;
@@ -20,6 +21,7 @@ export const AddTaskModal: React.FC<Props> = ({ visible, onClose, theme, onAddTa
   const [title, setTitle] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
   const [startTime, setStartTime] = useState('09:00 AM');
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [durationMins, setDurationMins] = useState('60');
   const [notes, setNotes] = useState('');
   const [requiresTimer, setRequiresTimer] = useState(false);
@@ -201,13 +203,17 @@ export const AddTaskModal: React.FC<Props> = ({ visible, onClose, theme, onAddTa
           <View style={styles.timeRow}>
             <View style={{ flex: 1, marginRight: 8 }}>
               <Text style={styles.label}>Start Time:</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="09:00 AM"
-                placeholderTextColor="#94A3B8"
-                value={startTime}
-                onChangeText={setStartTime}
-              />
+              <TouchableOpacity
+                style={styles.timeCardTrigger}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setShowTimePicker(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Clock size={16} color="#2563EB" />
+                <Text style={styles.timeCardText}>{startTime || '09:00 AM'}</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={{ flex: 1, marginLeft: 8 }}>
@@ -222,6 +228,14 @@ export const AddTaskModal: React.FC<Props> = ({ visible, onClose, theme, onAddTa
               />
             </View>
           </View>
+
+          <TimePickerModal
+            visible={showTimePicker}
+            initialTimeStr={startTime}
+            title="Select Start Time"
+            onSelectTime={(timeStr) => setStartTime(timeStr)}
+            onClose={() => setShowTimePicker(false)}
+          />
 
           <Text style={styles.label}>Notes (Optional):</Text>
           <TextInput
@@ -411,6 +425,22 @@ const styles = StyleSheet.create({
 
   timeRow: {
     flexDirection: 'row',
+  },
+  timeCardTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  timeCardText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 14,
+    color: '#2563EB',
   },
   submitBtn: {
     flexDirection: 'row',

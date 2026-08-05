@@ -16,7 +16,7 @@ interface Props {
   timetable: TimetableSlot[];
   syllabus: SubjectProgress[];
   journalEntries: JournalEntry[];
-  onNavigate?: (tab: 'planner' | 'academic' | 'ai' | 'journal') => void;
+  onNavigate?: (tab: 'planner' | 'settings' | 'ai' | 'journal') => void;
 }
 
 export const GlobalSearchModal: React.FC<Props> = ({
@@ -148,14 +148,14 @@ export const GlobalSearchModal: React.FC<Props> = ({
                 <SearchEmptyIllustration size={120} />
                 <Text style={styles.emptyTitle}>Quick Global Search</Text>
                 <Text style={styles.emptySubtitle}>
-                  Search across your time blocks, classes, syllabus topics, and journal reflections in real-time.
+                  Search across your time blocks, tasks, goals, and journal reflections in real-time.
                 </Text>
               </View>
             ) : searchResults.length === 0 ? (
               <View style={styles.emptyStateContainer}>
                 <Text style={styles.emptyTitle}>No matching logs found</Text>
                 <Text style={styles.emptySubtitle}>
-                  Try searching with keywords like "DSA", "LeetCode", "DBMS", or "Journal".
+                  Try searching with keywords like "Coding", "Project", "Workout", or "Journal".
                 </Text>
               </View>
             ) : (
@@ -169,7 +169,7 @@ export const GlobalSearchModal: React.FC<Props> = ({
                     // Navigate to the correct tab based on result type
                     if (onNavigate) {
                       if (item.type === 'task') onNavigate('planner');
-                      else if (item.type === 'class' || item.type === 'topic') onNavigate('academic');
+                      else if (item.type === 'class' || item.type === 'topic') onNavigate('ai');
                       else if (item.type === 'journal') onNavigate('journal');
                     }
                   }}

@@ -31,6 +31,21 @@ export interface ThemeConfig {
     deep_work: string;
     tired: string;
   };
+  // Material Design 3 color roles
+  surfaceContainer: string;       // Main card / sheet background
+  surfaceContainerLow: string;    // Subtle recessed areas
+  surfaceContainerHigh: string;   // Elevated card surfaces
+  surfaceVariant: string;         // Chip / tag backgrounds
+  onSurfaceVariant: string;       // Secondary icon & label color
+  primaryContainer: string;       // Tonal button / selected chip bg
+  onPrimaryContainer: string;     // Text/icon on primary container
+  secondaryContainer: string;     // Tonal FAB / secondary button bg
+  onSecondaryContainer: string;   // Text/icon on secondary container
+  outline: string;                // Border color for inputs & cards
+  outlineVariant: string;         // Subtle divider color
+  scrim: string;                  // Modal backdrop scrim
+  inverseSurface: string;         // Snackbar / toast background
+  inverseOnSurface: string;       // Snackbar / toast text
 }
 
 // Helper to get a category's color from the user's dynamic category list
@@ -42,7 +57,10 @@ export function getCategoryColor(categories: UserCategory[], categoryId: string)
 // Helper to get a category's name
 export function getCategoryName(categories: UserCategory[], categoryId: string): string {
   const cat = categories.find(c => c.id === categoryId);
-  return cat?.name || categoryId;
+  if (cat) return cat.name;
+  if (categoryId === 'cat-work') return 'Work & Projects';
+  if (categoryId?.startsWith('cat-')) return categoryId.replace('cat-', '');
+  return categoryId || '';
 }
 
 // Helper function to safely parse hex to RGB
@@ -127,6 +145,21 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
       deep_work: '#0F172A',
       tired: '#64748B',
     },
+    // M3 color roles
+    surfaceContainer: '#F3F4F6',
+    surfaceContainerLow: '#F8FAFC',
+    surfaceContainerHigh: '#ECEEF2',
+    surfaceVariant: '#E7E0EC',
+    onSurfaceVariant: '#49454F',
+    primaryContainer: '#E8EAF6',
+    onPrimaryContainer: '#1A1B52',
+    secondaryContainer: '#E8DEF8',
+    onSecondaryContainer: '#1D192B',
+    outline: '#CAC4D0',
+    outlineVariant: '#E7E0EC',
+    scrim: 'rgba(0,0,0,0.32)',
+    inverseSurface: '#313033',
+    inverseOnSurface: '#F4EFF4',
   },
 
   slate_light: {
@@ -158,6 +191,21 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
       deep_work: '#1E293B',
       tired: '#64748B',
     },
+    // M3 color roles
+    surfaceContainer: '#EEF0F5',
+    surfaceContainerLow: '#F4F6FA',
+    surfaceContainerHigh: '#E4E7ED',
+    surfaceVariant: '#DCE0E8',
+    onSurfaceVariant: '#42484F',
+    primaryContainer: '#DCE4F0',
+    onPrimaryContainer: '#0E1820',
+    secondaryContainer: '#D8E4F0',
+    onSecondaryContainer: '#111C28',
+    outline: '#BDC5CF',
+    outlineVariant: '#DCE0E8',
+    scrim: 'rgba(0,0,0,0.32)',
+    inverseSurface: '#2A2F35',
+    inverseOnSurface: '#EFF0F4',
   },
 
   minimal_white: {
@@ -189,6 +237,21 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
       deep_work: '#0F172A',
       tired: '#64748B',
     },
+    // M3 color roles
+    surfaceContainer: '#F5F5F5',
+    surfaceContainerLow: '#F9FAFB',
+    surfaceContainerHigh: '#EBEBEB',
+    surfaceVariant: '#E8E5EC',
+    onSurfaceVariant: '#4A4650',
+    primaryContainer: '#E8EAF6',
+    onPrimaryContainer: '#1A1B52',
+    secondaryContainer: '#EDE7F6',
+    onSecondaryContainer: '#21005D',
+    outline: '#C9C3D0',
+    outlineVariant: '#E6E0EB',
+    scrim: 'rgba(0,0,0,0.32)',
+    inverseSurface: '#313033',
+    inverseOnSurface: '#F4EFF4',
   },
 };
 

@@ -32,6 +32,16 @@ export const triggerHaptic = {
     }
   },
 
+  selection: async () => {
+    if (Platform.OS !== 'web') {
+      try {
+        await Haptics.selectionAsync();
+      } catch {}
+    } else if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate?.(10);
+    }
+  },
+
   notificationSuccess: async () => {
     if (Platform.OS !== 'web') {
       try {
@@ -39,6 +49,16 @@ export const triggerHaptic = {
       } catch {}
     } else if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate?.([40, 30, 50]);
+    }
+  },
+
+  notificationWarning: async () => {
+    if (Platform.OS !== 'web') {
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } catch {}
+    } else if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate?.([20, 40, 20]);
     }
   }
 };

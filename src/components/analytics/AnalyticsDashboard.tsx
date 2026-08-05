@@ -11,6 +11,7 @@ import { calculateDetailedProductivityScore, generatePersonalizedInsights } from
 import { triggerHaptic } from '../../services/haptics';
 import { AnalyticsEmptyIllustration } from '../common/EmptyStateIllustrations';
 import { CategoryIcon } from '../common/CategoryIcon';
+import { TimePickerModal } from '../common/TimePickerModal';
 import {
   Key,
   Edit3,
@@ -129,6 +130,7 @@ export const AnalyticsDashboard: React.FC<Props> = ({
   const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editTime, setEditTime] = useState('');
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [editCategory, setEditCategory] = useState<TaskCategory>(categories[0]?.id || '');
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
@@ -544,7 +546,7 @@ export const AnalyticsDashboard: React.FC<Props> = ({
               <View style={styles.promptInputWrapper}>
                 <TextInput
                   style={styles.promptTextInput}
-                  placeholder="e.g., 3 hours on DSA trees & DP, 2 hours on documentary color grading, and keep evening free after 6 PM..."
+                  placeholder="e.g., 3 hours on core work projects, 2 hours on skill learning, and keep evening free after 6 PM..."
                   placeholderTextColor="#9CA3AF"
                   value={customPromptText}
                   onChangeText={setCustomPromptText}
@@ -623,19 +625,23 @@ export const AnalyticsDashboard: React.FC<Props> = ({
                 style={styles.modalTitleInput}
                 value={editTitle}
                 onChangeText={setEditTitle}
-                placeholder="e.g., DSA Trees & Graph Revision"
+                placeholder="e.g., Deep Focus & Project Sprint"
                 placeholderTextColor="#94A3B8"
               />
 
               {/* Time Range Selector */}
-              <Text style={styles.modalLabel}>Scheduled Time Range</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={editTime}
-                onChangeText={setEditTime}
-                placeholder="e.g. 08:00 AM - 09:30 AM"
-                placeholderTextColor="#94A3B8"
-              />
+              <Text style={styles.modalLabel}>Scheduled Start Time</Text>
+              <TouchableOpacity
+                style={styles.timeCardTrigger}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setShowTimePicker(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Clock size={16} color="#2563EB" />
+                <Text style={styles.timeCardText}>{editTime || '08:00 AM'}</Text>
+              </TouchableOpacity>
 
               {/* Quick Time Presets */}
               <View style={styles.timePresetsRow}>
@@ -717,6 +723,15 @@ export const AnalyticsDashboard: React.FC<Props> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Native Time Picker Modal */}
+      <TimePickerModal
+        visible={showTimePicker}
+        initialTimeStr={editTime}
+        title="Select Scheduled Time"
+        onSelectTime={(timeStr) => setEditTime(timeStr)}
+        onClose={() => setShowTimePicker(false)}
+      />
     </View>
   );
 };
@@ -733,9 +748,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    // M3 Top App Bar: surfaceContainer bg
+    backgroundColor: '#F3F4F6',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    // M3 outlineVariant divider
+    borderBottomColor: '#E7E0EC',
   },
   headerTitle: {
     fontFamily: FONTS.displayBold,
@@ -752,16 +769,18 @@ const styles = StyleSheet.create({
   keyBtnPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    // M3 Tonal Button (assist chip style)
+    backgroundColor: '#E7E0EC',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 16,
+    borderRadius: 20,
     gap: 4,
   },
   keyBtnPillText: {
     fontFamily: FONTS.groteskBold,
     fontSize: 12,
-    color: '#0F172A',
+    letterSpacing: 0.1,
+    color: '#1C1B1F',
   },
   scrollContent: {
     padding: 16,
@@ -841,16 +860,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   runAiAnalysisBtn: {
+    // M3 Filled Button: primary bg, 20dp radius
     backgroundColor: '#2563EB',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 0,
+    shadowOpacity: 0,
+    minHeight: 40,
   },
   runAiAnalysisText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 11,
+    // M3 labelLarge: 14sp, +0.1 tracking
+    fontSize: 14,
+    letterSpacing: 0.1,
     color: '#FFFFFF',
   },
   emptyInsightsCard: {
@@ -884,14 +909,18 @@ const styles = StyleSheet.create({
   },
   swipableInsightCard: {
     width: 280,
-    borderRadius: 20,
-    padding: 18,
+    // M3 Filled Card: extraLarge radius (28dp), outlineVariant border
+    borderRadius: 28,
+    padding: 20,
     marginRight: 12,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E7E0EC',
+    // M3 level 1 elevation (subtle tonal shadow)
+    shadowColor: '#49454F',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   },
   cardHeaderTop: {
     flexDirection: 'row',
@@ -901,27 +930,34 @@ const styles = StyleSheet.create({
   },
   cardTagHeader: {
     fontFamily: FONTS.groteskBold,
+    // M3 labelSmall: 11sp, +0.5 tracking
     fontSize: 11,
     letterSpacing: 0.5,
   },
   cardInnerPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    // M3 suggestion chip pill radius
+    borderRadius: 20,
   },
   cardInnerPillText: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 10,
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
   cardBigMetric: {
     fontFamily: FONTS.displayBold,
-    fontSize: 18,
+    // M3 titleLarge: 22sp
+    fontSize: 20,
     marginBottom: 8,
+    letterSpacing: 0,
   },
   cardBodyText: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
-    lineHeight: 18,
+    fontFamily: FONTS.groteskRegular,
+    // M3 bodyMedium: 14sp, +0.25 tracking
+    fontSize: 13,
+    lineHeight: 20,
+    letterSpacing: 0.25,
   },
   paginationDotsRow: {
     flexDirection: 'row',
@@ -934,7 +970,8 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#CBD5E1',
+    // M3 outlineVariant color for inactive dots
+    backgroundColor: '#CAC4D0',
   },
   dotActive: {
     width: 18,
@@ -957,25 +994,31 @@ const styles = StyleSheet.create({
   addSlotPillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    // M3 Tonal button (secondary container)
+    backgroundColor: '#E8DEF8',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
     gap: 4,
   },
   addSlotPillText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 11,
-    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 0.1,
+    // M3 onSecondaryContainer
+    color: '#1D192B',
   },
   suggestedContainer: {
     marginVertical: 6,
   },
   planSlotCard: {
+    // M3 List item: surfaceContainerLow bg, medium radius (12dp)
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E7E0EC',
   },
   slotDisplayRow: {
     flexDirection: 'row',
@@ -1025,14 +1068,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // M3 Filled Button: primary, 20dp pill, 40dp min height
     backgroundColor: '#2563EB',
-    paddingVertical: 13,
-    borderRadius: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     marginRight: 6,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   addToPlannerBtnText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 12,
+    // M3 labelLarge: 14sp, +0.1 tracking
+    fontSize: 14,
+    letterSpacing: 0.1,
     color: '#FFFFFF',
     marginLeft: 6,
   },
@@ -1041,14 +1089,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingVertical: 13,
-    borderRadius: 16,
+    // M3 Outlined Button: transparent bg, outline border, primary text
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    paddingVertical: 10,
+    borderRadius: 20,
     marginLeft: 6,
   },
   replanActionBtnText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 12,
+    fontSize: 14,
+    letterSpacing: 0.1,
     color: '#2563EB',
     marginLeft: 6,
   },
@@ -1088,32 +1140,40 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   presetChip: {
-    backgroundColor: '#EFF6FF',
+    // M3 Suggestion chip: pill radius, surfaceVariant bg
+    backgroundColor: '#E7E0EC',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 20,
     marginRight: 6,
   },
   presetChipText: {
     fontFamily: FONTS.groteskMedium,
-    fontSize: 10,
-    color: '#1E40AF',
+    fontSize: 12,
+    letterSpacing: 0.4,
+    // M3 onSurfaceVariant
+    color: '#49454F',
   },
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // M3 Filled Button: primary, 20dp pill
     backgroundColor: '#2563EB',
-    paddingVertical: 13,
-    borderRadius: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     marginBottom: 16,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   generateBtnDisabled: {
-    opacity: 0.6,
+    opacity: 0.38,
   },
   generateBtnText: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 13,
+    // M3 labelLarge
+    fontSize: 14,
+    letterSpacing: 0.1,
     color: '#FFFFFF',
     marginLeft: 8,
   },
@@ -1136,12 +1196,14 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
   },
   sheetDragHandle: {
-    width: 36,
+    // M3 drag handle: 32×4dp, outlineVariant color
+    width: 32,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#CAC4D0',
     alignSelf: 'center',
-    marginBottom: 14,
+    marginTop: 8,
+    marginBottom: 16,
   },
   modalHeaderRow: {
     flexDirection: 'row',
@@ -1156,25 +1218,30 @@ const styles = StyleSheet.create({
   },
   modalCloseBtn: {
     padding: 6,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    // M3 Icon Button: surfaceVariant bg
+    backgroundColor: '#E7E0EC',
   },
   modalLabel: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 11,
-    color: '#475569',
-    marginTop: 10,
+    fontFamily: FONTS.groteskMedium,
+    // M3 labelMedium: 12sp, +0.5 tracking
+    fontSize: 12,
+    color: '#49454F',
+    marginTop: 12,
     marginBottom: 6,
     letterSpacing: 0.5,
   },
   modalTitleInput: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontFamily: FONTS.displayBold,
+    // M3 Outlined Text Field: 4dp radius, outline border
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontFamily: FONTS.jakartaMedium,
     fontSize: 15,
-    color: '#0F172A',
+    color: '#1C1B1F',
     marginBottom: 6,
   },
   modalInput: {
@@ -1274,6 +1341,23 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.groteskBold,
     fontSize: 13,
     color: '#FFFFFF',
+  },
+  timeCardTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  timeCardText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 14,
+    color: '#2563EB',
   },
   sectionDivider: {
     height: 1,

@@ -117,7 +117,7 @@ export const PomodoroView: React.FC<Props> = ({
         const elapsedMins = Math.max(1, Math.round((totalDuration - secondsLeft) / 60));
         Database.logPomodoroSession(
           elapsedMins,
-          'DSA',
+          targetTask?.category || 'Focus & Deep Work',
           sessionGoal.trim() || 'Focus Session',
           undefined,
           true,
@@ -241,7 +241,7 @@ export const PomodoroView: React.FC<Props> = ({
 
     Database.logPomodoroSession(
       elapsedMins,
-      'DSA',
+      targetTask?.category || 'Focus & Deep Work',
       sessionGoal.trim() || 'Focus Session',
       template.label,
       isFinished,

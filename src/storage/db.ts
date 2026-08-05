@@ -14,6 +14,7 @@ const KEYS = {
   POMODORO_SESSIONS: '@logmylife_pomodoro_sessions',
   CATEGORIES: '@logmylife_categories',
   ACTIVITY_LOGS: '@logmylife_activity_logs',
+  ATTENDANCE_RECORDS: '@logmylife_attendance_records',
 };
 
 const DEFAULT_GAMIFICATION: UserGamification = {
@@ -49,6 +50,7 @@ let memoryStore: {
   pomodoroSessions: PomodoroSession[];
   categories: UserCategory[];
   activityLogs: ActivityLog[];
+  attendanceRecords: any[];
 } = {
   profile: SEED_USER_PROFILE,
   tasks: [],
@@ -61,6 +63,7 @@ let memoryStore: {
   pomodoroSessions: [],
   categories: [],
   activityLogs: [],
+  attendanceRecords: [],
 };
 
 // Safe Storage Adapter with Web localStorage / in-memory fallback
@@ -308,6 +311,14 @@ export const Database = {
     return updated;
   },
 
+  async resetCategoriesToDefault(): Promise<UserCategory[]> {
+    memoryStore.categories = DEFAULT_CATEGORIES;
+    try {
+      await storageAdapter.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
+    } catch {}
+    return DEFAULT_CATEGORIES;
+  },
+
   getCategoryById(categories: UserCategory[], categoryId: string): UserCategory | undefined {
     return categories.find(c => c.id === categoryId);
   },
@@ -445,6 +456,7 @@ export const Database = {
       ...task,
       id: 't-' + Date.now(),
       requiresTimer: task.requiresTimer ?? false,
+      notificationEnabled: task.notificationEnabled ?? true,
       timerDurationMins: timerMins,
       leftoverSeconds: task.leftoverSeconds ?? timerMins * 60,
       elapsedSeconds: task.elapsedSeconds ?? 0,
@@ -868,6 +880,45 @@ export const Database = {
     memoryStore.geminiApiKey = key;
     try {
       await storageAdapter.setItem(KEYS.GEMINI_KEY, key);
+    } catch {}
+  },
+
+  // ────────── Offline Location Attendance Records ──────────
+
+  async getAttendanceRecords(): Promise<any[]> {
+    try {
+      const data = await storageAdapter.getItem(KEYS.ATTENDANCE_RECORDS);
+      return data ? JSON.parse(data) : memoryStore.attendanceRecords;
+    } catch {
+      return memoryStore.attendanceRecords;
+    }
+  },
+
+  async saveAttendanceRecord(record: any): Promise<any[]> {
+    const records = await this.getAttendanceRecords();
+    const filtered = records.filter(r => !(r.slotId === record.slotId && r.dateStr === record.dateStr));
+    const updated = [record, ...filtered];
+    memoryStore.attendanceRecords = updated;
+    try {
+      await storageAdapter.setItem(KEYS.ATTENDANCE_RECORDS, JSON.stringify(updated));
+    } catch {}
+    return updated;
+  },
+
+  async deleteAttendanceRecord(id: string): Promise<any[]> {
+    const records = await this.getAttendanceRecords();
+    const updated = records.filter(r => r.id !== id);
+    memoryStore.attendanceRecords = updated;
+    try {
+      await storageAdapter.setItem(KEYS.ATTENDANCE_RECORDS, JSON.stringify(updated));
+    } catch {}
+    return updated;
+  },
+
+  async clearAttendanceHistory(): Promise<void> {
+    memoryStore.attendanceRecords = [];
+    try {
+      await storageAdapter.setItem(KEYS.ATTENDANCE_RECORDS, JSON.stringify([]));
     } catch {}
   }
 };

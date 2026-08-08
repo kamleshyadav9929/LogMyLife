@@ -1,4 +1,4 @@
-import { UserProfile, Task, TimetableSlot, SubjectProgress, JournalEntry, AISyncResult, UserCategory } from '../types';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserCategory } from '../types';
 
 export const SEED_USER_PROFILE: UserProfile = {
   name: 'User Profile',
@@ -13,8 +13,6 @@ export const SEED_TASKS: Task[] = [];
 export const SEED_TIMETABLE: TimetableSlot[] = [];
 
 export const SEED_SYLLABUS: SubjectProgress[] = [];
-
-export const SEED_JOURNAL: JournalEntry[] = [];
 
 export const SEED_AI_SYNC: AISyncResult[] = [];
 

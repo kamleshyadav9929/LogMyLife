@@ -1,16 +1,14 @@
-import { Task, JournalEntry, SubjectProgress, AISyncResult, TaskCategory, UserCategory } from '../types';
+import { Task, SubjectProgress, AISyncResult, TaskCategory, UserCategory } from '../types';
 
 export async function runNightlyAISync(
   apiKey: string | null,
   tasks: Task[],
-  journalEntries: JournalEntry[],
   syllabus: SubjectProgress[],
   categories?: UserCategory[]
 ): Promise<AISyncResult> {
   const dateStr = new Date().toISOString().split('T')[0];
   const completedTasks = tasks.filter(t => t.completed);
   const pendingTasks = tasks.filter(t => !t.completed);
-  const latestJournal = journalEntries[0] || null;
 
   // Build category names from user-defined categories
   const getCatName = (catId: string) => {
@@ -35,8 +33,6 @@ Here are the user's today activity logs:
 - Date: ${dateStr}
 - Completed Tasks (${completedTasks.length}/${tasks.length}): ${completedTasks.map(t => `${t.title} [${getCatName(t.category)}]`).join(', ') || 'None'}
 - Pending Tasks (${pendingTasks.length}): ${pendingTasks.map(t => `${t.title} [${getCatName(t.category)}]`).join(', ') || 'None'}
-- Latest Mood: ${latestJournal ? latestJournal.mood : 'Normal'}
-- Journal Reflection: "${latestJournal ? latestJournal.reflections : 'Worked through daily tasks'}"
 - User's Categories: ${categoryStr}
 ${subjectStr ? `- Enrolled Subjects: ${subjectStr}` : ''}
 
@@ -91,7 +87,7 @@ Analyze this data and return ONLY a valid JSON object (no markdown codeblock for
 
   // Authentic Local Data-Driven AI Synthesizer
   const ratio = tasks.length > 0 ? completedTasks.length / tasks.length : 0;
-  const score = Math.round(ratio * 80 + (latestJournal ? 20 : 0));
+  const score = tasks.length > 0 ? Math.round(ratio * 100) : 75;
 
   const topTaskTitle = completedTasks[0]?.title || pendingTasks[0]?.title || 'Daily Goal';
 

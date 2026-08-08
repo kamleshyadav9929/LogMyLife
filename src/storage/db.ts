@@ -1,13 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, JournalEntry, AISyncResult, UserGamification, PomodoroSession, TaskCategory, UserCategory, ActivityLog } from '../types';
-import { SEED_USER_PROFILE, SEED_TASKS, SEED_TIMETABLE, SEED_SYLLABUS, SEED_JOURNAL, SEED_AI_SYNC, DEFAULT_CATEGORIES } from '../seed/defaultData';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, PomodoroSession, TaskCategory, UserCategory, ActivityLog } from '../types';
+import { SEED_USER_PROFILE, SEED_TASKS, SEED_TIMETABLE, SEED_SYLLABUS, SEED_AI_SYNC, DEFAULT_CATEGORIES } from '../seed/defaultData';
 
 const KEYS = {
   USER_PROFILE: '@logmylife_user_profile',
   TASKS: '@logmylife_tasks',
   TIMETABLE: '@logmylife_timetable',
   SYLLABUS: '@logmylife_syllabus',
-  JOURNAL: '@logmylife_journal',
   AI_SYNC: '@logmylife_ai_sync',
   GEMINI_KEY: '@logmylife_gemini_api_key',
   GAMIFICATION: '@logmylife_gamification',
@@ -43,7 +42,6 @@ let memoryStore: {
   tasks: Task[];
   timetable: TimetableSlot[];
   syllabus: SubjectProgress[];
-  journal: JournalEntry[];
   aiSync: AISyncResult[];
   geminiApiKey: string;
   gamification: UserGamification;
@@ -56,7 +54,6 @@ let memoryStore: {
   tasks: [],
   timetable: [],
   syllabus: [],
-  journal: [],
   aiSync: [],
   geminiApiKey: '',
   gamification: DEFAULT_GAMIFICATION,
@@ -181,7 +178,6 @@ export const Database = {
         await storageAdapter.setItem(KEYS.TASKS, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.TIMETABLE, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.SYLLABUS, JSON.stringify([]));
-        await storageAdapter.setItem(KEYS.JOURNAL, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.AI_SYNC, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.GAMIFICATION, JSON.stringify(DEFAULT_GAMIFICATION));
         await storageAdapter.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
@@ -191,7 +187,6 @@ export const Database = {
         memoryStore.tasks = [];
         memoryStore.timetable = [];
         memoryStore.syllabus = [];
-        memoryStore.journal = [];
         memoryStore.aiSync = [];
         memoryStore.gamification = DEFAULT_GAMIFICATION;
         memoryStore.categories = DEFAULT_CATEGORIES;
@@ -206,9 +201,6 @@ export const Database = {
 
         const sys = await storageAdapter.getItem(KEYS.SYLLABUS);
         if (sys) memoryStore.syllabus = JSON.parse(sys);
-
-        const j = await storageAdapter.getItem(KEYS.JOURNAL);
-        if (j) memoryStore.journal = JSON.parse(j);
 
         const ai = await storageAdapter.getItem(KEYS.AI_SYNC);
         if (ai) memoryStore.aiSync = JSON.parse(ai);
@@ -698,42 +690,6 @@ export const Database = {
 
     const updated = [...newTasks, ...tasks];
     await this.saveTasks(updated);
-    return updated;
-  },
-
-  // ────────── Journal ──────────
-
-  async getJournalEntries(): Promise<JournalEntry[]> {
-    try {
-      const data = await storageAdapter.getItem(KEYS.JOURNAL);
-      return data ? JSON.parse(data) : memoryStore.journal;
-    } catch {
-      return memoryStore.journal;
-    }
-  },
-
-  async saveJournalEntry(entry: Omit<JournalEntry, 'id'>): Promise<JournalEntry[]> {
-    const entries = await this.getJournalEntries();
-    const newEntry: JournalEntry = {
-      ...entry,
-      id: 'j-' + Date.now(),
-    };
-    const updated = [newEntry, ...entries];
-    memoryStore.journal = updated;
-    try {
-      await storageAdapter.setItem(KEYS.JOURNAL, JSON.stringify(updated));
-    } catch {}
-    await this.addXP(75);
-    return updated;
-  },
-
-  async deleteJournalEntry(entryId: string): Promise<JournalEntry[]> {
-    const entries = await this.getJournalEntries();
-    const updated = entries.filter(e => e.id !== entryId);
-    memoryStore.journal = updated;
-    try {
-      await storageAdapter.setItem(KEYS.JOURNAL, JSON.stringify(updated));
-    } catch {}
     return updated;
   },
 

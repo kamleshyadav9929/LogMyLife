@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Task, JournalEntry, UserGamification, UserCategory } from '../../types';
+import { Task, UserGamification, UserCategory } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
@@ -10,11 +10,10 @@ import { ChevronLeft, ChevronRight, ArrowLeft, Flame, Trophy, CheckCircle2 } fro
 interface Props {
   theme: ThemeConfig;
   tasks: Task[];
-  journalEntries: JournalEntry[];
   gamification: UserGamification;
   categories?: UserCategory[];
   onBackToDashboard: () => void;
-  onNavigateTab?: (tab: 'planner' | 'settings' | 'ai' | 'journal') => void;
+  onNavigateTab?: (tab: 'planner' | 'settings' | 'ai') => void;
 }
 
 const MONTH_NAMES = [
@@ -27,14 +26,13 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export const StreakCalendarView: React.FC<Props> = ({
   theme,
   tasks,
-  journalEntries,
   gamification,
   categories = [],
   onBackToDashboard,
   onNavigateTab,
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedDayDetails, setSelectedDayDetails] = useState<{ dateStr: string; tasksCount: number; journalCount: number } | null>(null);
+  const [selectedDayDetails, setSelectedDayDetails] = useState<{ dateStr: string; tasksCount: number } | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -74,8 +72,7 @@ export const StreakCalendarView: React.FC<Props> = ({
     const dateStr = `${year}-${monthStr}-${dayStr}`;
 
     const completedTasksCount = tasks.filter(t => t.completed && t.dateStr === dateStr).length;
-    const hasJournal = journalEntries.some(j => j.dateStr === dateStr);
-    const isDone = completedTasksCount > 0 || hasJournal;
+    const isDone = completedTasksCount > 0;
 
     if (isDone) activeMonthDaysCount++;
 
@@ -89,7 +86,6 @@ export const StreakCalendarView: React.FC<Props> = ({
       isDone,
       isToday,
       completedTasksCount,
-      journalCount: hasJournal ? 1 : 0,
       isFuture: new Date(dateStr) > new Date(todayStr),
     });
   }
@@ -97,7 +93,6 @@ export const StreakCalendarView: React.FC<Props> = ({
   // Real continuous streak & longest streak calculation
   const streakMetrics = calculateMultiFactorStreak(
     tasks,
-    journalEntries,
     [],
     [],
     categories
@@ -199,7 +194,6 @@ export const StreakCalendarView: React.FC<Props> = ({
                 setSelectedDayDetails({
                   dateStr: item.dateStr!,
                   tasksCount: item.completedTasksCount || 0,
-                  journalCount: item.journalCount || 0,
                 });
               }}
               activeOpacity={0.8}
@@ -229,26 +223,19 @@ export const StreakCalendarView: React.FC<Props> = ({
       {selectedDayDetails && (
         <View style={styles.dayDetailsCard}>
           <View style={styles.dayDetailsHeader}>
-            <CheckCircle2 size={16} color={selectedDayDetails.tasksCount > 0 || selectedDayDetails.journalCount > 0 ? '#10B981' : '#64748B'} />
+            <CheckCircle2 size={16} color={selectedDayDetails.tasksCount > 0 ? '#10B981' : '#64748B'} />
             <Text style={styles.dayDetailsTitle}>
               Activity for {selectedDayDetails.dateStr}
             </Text>
           </View>
 
-          {selectedDayDetails.tasksCount === 0 && selectedDayDetails.journalCount === 0 ? (
-            <Text style={styles.dayDetailsBody}>No tasks or journal reflections completed on this date.</Text>
+          {selectedDayDetails.tasksCount === 0 ? (
+            <Text style={styles.dayDetailsBody}>No tasks completed on this date.</Text>
           ) : (
             <View style={{ gap: 4 }}>
-              {selectedDayDetails.tasksCount > 0 && (
-                <Text style={styles.dayDetailsBody}>
-                  ✓ Completed {selectedDayDetails.tasksCount} task(s)
-                </Text>
-              )}
-              {selectedDayDetails.journalCount > 0 && (
-                <Text style={styles.dayDetailsBody}>
-                  📓 Saved daily reflection log
-                </Text>
-              )}
+              <Text style={styles.dayDetailsBody}>
+                ✓ Completed {selectedDayDetails.tasksCount} task(s)
+              </Text>
             </View>
           )}
         </View>

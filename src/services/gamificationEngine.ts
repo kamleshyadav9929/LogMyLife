@@ -1,4 +1,4 @@
-import { Task, JournalEntry, ActivityLog, PomodoroSession, UserGamification, Achievement } from '../types';
+import { Task, ActivityLog, PomodoroSession, UserGamification, Achievement } from '../types';
 
 export interface DailyChallenge {
   id: string;
@@ -6,7 +6,7 @@ export interface DailyChallenge {
   description: string;
   rewardXP: number;
   completed: boolean;
-  type: 'tasks' | 'timer' | 'journal' | 'categories';
+  type: 'tasks' | 'timer' | 'categories';
   targetCount: number;
   currentCount: number;
 }
@@ -38,14 +38,12 @@ export function getLevelProgress(xp: number): { level: number; currentXP: number
 export function generateDailyChallenges(
   dateStr: string,
   tasks: Task[],
-  pomodoros: PomodoroSession[],
-  journals: JournalEntry[]
+  pomodoros: PomodoroSession[]
 ): DailyChallenge[] {
   const dayTasks = tasks.filter(t => t.dateStr === dateStr);
   const completedTasks = dayTasks.filter(t => t.completed).length;
 
   const dayPomodoros = pomodoroSessionsFilter(pomodoros, dateStr);
-  const hasJournal = journals.some(j => j.dateStr === dateStr);
 
   return [
     {
@@ -68,16 +66,6 @@ export function generateDailyChallenges(
       targetCount: 1,
       currentCount: Math.min(1, dayPomodoros),
     },
-    {
-      id: `ch-journal-${dateStr}`,
-      title: 'Nightly Reflection',
-      description: 'Log your daily journal reflection',
-      rewardXP: 50,
-      completed: hasJournal,
-      type: 'journal',
-      targetCount: 1,
-      currentCount: hasJournal ? 1 : 0,
-    },
   ];
 }
 
@@ -88,7 +76,6 @@ function pomodoroSessionsFilter(sessions: PomodoroSession[], dateStr: string): n
 export function checkAchievements(
   gamification: UserGamification,
   tasks: Task[],
-  journals: JournalEntry[],
   pomodoros: PomodoroSession[]
 ): Achievement[] {
   const completedTasksCount = tasks.filter(t => t.completed).length;
@@ -121,15 +108,6 @@ export function checkAchievements(
       unlocked: gamification.streakDays >= 7,
       reqCount: 7,
       currentCount: Math.min(7, gamification.streakDays),
-    },
-    {
-      id: 'reflection_pro',
-      title: 'Self Reflective',
-      description: 'Log 5+ journal reflections',
-      iconName: 'book',
-      unlocked: journals.length >= 5,
-      reqCount: 5,
-      currentCount: Math.min(5, journals.length),
     },
   ];
 }

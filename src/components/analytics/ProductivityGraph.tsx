@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { FONTS } from '../../theme/typography';
-import { Task, JournalEntry } from '../../types';
+import { Task } from '../../types';
 
 interface GraphDataPoint {
   label: string;
@@ -11,10 +11,9 @@ interface GraphDataPoint {
 
 interface Props {
   tasks?: Task[];
-  journalEntries?: JournalEntry[];
 }
 
-export const ProductivityGraph: React.FC<Props> = ({ tasks = [], journalEntries = [] }) => {
+export const ProductivityGraph: React.FC<Props> = ({ tasks = [] }) => {
   // Generate real 7-day data ending today
   const getWeekData = (): GraphDataPoint[] => {
     const days: GraphDataPoint[] = [];
@@ -30,15 +29,12 @@ export const ProductivityGraph: React.FC<Props> = ({ tasks = [], journalEntries 
       const monthDayStr = `${monthLabels[d.getMonth()]} ${d.getDate()}`;
 
       const dayTasks = tasks.filter(t => t.dateStr === dateStr);
-      const dayJournal = journalEntries.filter(j => j.dateStr === dateStr);
 
       let score = 0;
       if (dayTasks.length > 0) {
         const completed = dayTasks.filter(t => t.completed).length;
         const ratio = completed / dayTasks.length;
-        score = Math.round(ratio * 80 + (dayJournal.length > 0 ? 20 : 0));
-      } else if (dayJournal.length > 0) {
-        score = 40;
+        score = Math.round(ratio * 100);
       }
 
       days.push({

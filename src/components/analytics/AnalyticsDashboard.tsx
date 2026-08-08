@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Modal, Dimensions } from 'react-native';
-import { Task, JournalEntry, SubjectProgress, AISyncResult, UserGamification, TaskCategory, UserCategory } from '../../types';
+import { Task, SubjectProgress, AISyncResult, UserGamification, TaskCategory, UserCategory } from '../../types';
 import { ThemeConfig, getCategoryColor, getCategoryName } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { replanTomorrowSchedule, runNightlyAISync } from '../../services/gemini';
@@ -32,7 +32,6 @@ const CARD_STEP = CARD_WIDTH + CARD_MARGIN; // 292px per card step
 
 interface Props {
   tasks: Task[];
-  journalEntries: JournalEntry[];
   syllabus: SubjectProgress[];
   aiSyncResults: AISyncResult[];
   theme: ThemeConfig;
@@ -51,7 +50,6 @@ interface EditableScheduleItem {
 
 export const AnalyticsDashboard: React.FC<Props> = ({
   tasks,
-  journalEntries,
   syllabus,
   aiSyncResults,
   theme,
@@ -69,7 +67,7 @@ export const AnalyticsDashboard: React.FC<Props> = ({
     triggerHaptic.mediumImpact();
     setIsSyncingAI(true);
     const savedKey = await Database.getGeminiApiKey();
-    const result = await runNightlyAISync(savedKey, tasks, journalEntries, syllabus, categories);
+    const result = await runNightlyAISync(savedKey, tasks, syllabus, categories);
     await Database.saveAISyncResult(result);
     setLatestResult(result);
     onSyncComplete(result);
@@ -234,7 +232,6 @@ export const AnalyticsDashboard: React.FC<Props> = ({
   // Calculate dynamic multi-component productivity score
   const scoreBreakdown = calculateDetailedProductivityScore(
     tasks,
-    journalEntries,
     [], // activity logs
     [], // pomodoros
     categories,
@@ -243,7 +240,6 @@ export const AnalyticsDashboard: React.FC<Props> = ({
 
   const dynamicInsights = generatePersonalizedInsights(
     tasks,
-    journalEntries,
     [],
     [],
     categories,
@@ -258,7 +254,7 @@ export const AnalyticsDashboard: React.FC<Props> = ({
   const topCategory = Object.entries(categoryStats).sort((a, b) => b[1] - a[1])[0];
   const topCategoryName = topCategory && topCategory[1] > 0 ? getCategoryName(categories, topCategory[0]) : null;
 
-  const hasInsights = tasks.length > 0 || journalEntries.length > 0 || latestResult !== null;
+  const hasInsights = tasks.length > 0 || latestResult !== null;
 
   const timePresets = [
     '08:00 AM - 09:30 AM',
@@ -326,7 +322,7 @@ export const AnalyticsDashboard: React.FC<Props> = ({
 
         {/* 2. PRODUCTIVITY GRAPH (New Vertical Pill-Bar Design, Zero Borders) */}
         <View style={styles.sectionSpacing}>
-          <ProductivityGraph tasks={tasks} journalEntries={journalEntries} />
+          <ProductivityGraph tasks={tasks} />
         </View>
 
         {/* Faint Divider */}

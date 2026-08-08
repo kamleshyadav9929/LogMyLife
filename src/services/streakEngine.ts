@@ -1,18 +1,16 @@
-import { Task, JournalEntry, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
+import { Task, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
 
 export interface DailyActivityScore {
   score: number;
   taskPoints: number;
   timerPoints: number;
   verifiedBonus: number;
-  journalPoints: number;
   activityLogPoints: number;
   multiplier: number;
 }
 
 export function calculateDailyActivityScore(
   tasks: Task[],
-  journalEntries: JournalEntry[],
   activityLogs: ActivityLog[],
   pomodoroSessions: PomodoroSession[],
   categories: UserCategory[],
@@ -21,7 +19,6 @@ export function calculateDailyActivityScore(
 ): DailyActivityScore {
   // Filter for target date
   const dayTasks = tasks.filter(t => t.dateStr === dateStr);
-  const dayJournals = journalEntries.filter(j => j.dateStr === dateStr);
   const dayLogs = activityLogs.filter(l => l.dateStr === dateStr);
   const dayPomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(dateStr) && s.isCompleted);
 
@@ -47,10 +44,7 @@ export function calculateDailyActivityScore(
   // 2. Timer Points (10 pts per completed pomodoro session)
   const timerPoints = Math.min(30, dayPomodoros.length * 10);
 
-  // 3. Journal Points (15 pts if journal entry exists for date)
-  const journalPoints = dayJournals.length > 0 ? 15 : 0;
-
-  // 4. Activity Log Points (5 pts per manual activity log, weighted)
+  // 3. Activity Log Points (5 pts per manual activity log, weighted)
   let activityLogPoints = 0;
   dayLogs.forEach(l => {
     const weight = CATEGORY_TAG_WEIGHTS[l.tag] || 1.0;
@@ -58,11 +52,11 @@ export function calculateDailyActivityScore(
   });
   activityLogPoints = Math.min(15, activityLogPoints);
 
-  // 5. Streak Multiplier (grows 0.1x per consecutive streak day, caps at 1.5x)
+  // 4. Streak Multiplier (grows 0.1x per consecutive streak day, caps at 1.5x)
   const multiplier = Math.min(1.5, 1.0 + Math.floor(currentStreak / 3) * 0.1);
 
   // Total raw score before multiplier
-  const rawScore = taskPoints + timerPoints + verifiedBonus + journalPoints + activityLogPoints;
+  const rawScore = taskPoints + timerPoints + verifiedBonus + activityLogPoints;
   const finalScore = Math.min(100, Math.round(rawScore * multiplier));
 
   return {
@@ -70,7 +64,6 @@ export function calculateDailyActivityScore(
     taskPoints,
     timerPoints,
     verifiedBonus,
-    journalPoints,
     activityLogPoints,
     multiplier,
   };
@@ -78,7 +71,6 @@ export function calculateDailyActivityScore(
 
 export function calculateMultiFactorStreak(
   tasks: Task[],
-  journalEntries: JournalEntry[],
   activityLogs: ActivityLog[],
   pomodoroSessions: PomodoroSession[],
   categories: UserCategory[],
@@ -89,7 +81,6 @@ export function calculateMultiFactorStreak(
 
   const todayScoreObj = calculateDailyActivityScore(
     tasks,
-    journalEntries,
     activityLogs,
     pomodoroSessions,
     categories,
@@ -110,7 +101,6 @@ export function calculateMultiFactorStreak(
 
     const dayScoreObj = calculateDailyActivityScore(
       tasks,
-      journalEntries,
       activityLogs,
       pomodoroSessions,
       categories,
@@ -133,7 +123,6 @@ export function calculateMultiFactorStreak(
 
     const dayScoreObj = calculateDailyActivityScore(
       tasks,
-      journalEntries,
       activityLogs,
       pomodoroSessions,
       categories,

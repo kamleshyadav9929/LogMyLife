@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, TextInput } from 'react-native';
 import Svg, { G, Circle } from 'react-native-svg';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, JournalEntry, AISyncResult, UserGamification, UserCategory } from '../../types';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, UserCategory } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
@@ -17,7 +17,6 @@ import {
   ListTodo,
   Mic,
   X,
-  Flame,
 } from 'lucide-react-native';
 
 const MONO_FONT = Platform.select({
@@ -31,16 +30,14 @@ interface Props {
   tasks: Task[];
   timetable: TimetableSlot[];
   syllabus: SubjectProgress[];
-  journalEntries: JournalEntry[];
   aiSyncResults: AISyncResult[];
   gamification: UserGamification;
   categories: UserCategory[];
   theme: ThemeConfig;
-  onNavigateTab: (tab: 'planner' | 'ai' | 'journal') => void;
+  onNavigateTab: (tab: 'planner' | 'ai') => void;
   onOpenAddTask: () => void;
   onOpenPomodoro: () => void;
   onOpenSearch: () => void;
-  onOpenLogModal: () => void;
   onOpenEditProfile?: () => void;
   onOpenAchievements?: () => void;
   onOpenStreakModal?: () => void;
@@ -53,7 +50,6 @@ export const MasterDashboard: React.FC<Props> = ({
   tasks,
   timetable,
   syllabus,
-  journalEntries,
   aiSyncResults,
   gamification,
   categories,
@@ -62,7 +58,6 @@ export const MasterDashboard: React.FC<Props> = ({
   onOpenAddTask,
   onOpenPomodoro,
   onOpenSearch,
-  onOpenLogModal,
   onOpenEditProfile,
   onOpenAchievements,
   onOpenStreakModal,
@@ -116,23 +111,12 @@ export const MasterDashboard: React.FC<Props> = ({
         }
       });
     });
-
-    journalEntries.forEach((entry) => {
-      if (entry.reflections.toLowerCase().includes(q)) {
-        searchResults.push({
-          id: entry.id,
-          type: 'Journal',
-          title: entry.reflections.slice(0, 50) + '...',
-          subtitle: `Journal Log • ${entry.dateStr}`,
-        });
-      }
-    });
   }
 
   // Name extraction (e.g. Rao / Ashok)
   const displayName = profile.name.split(' ').length > 1 ? profile.name.split(' ').slice(-1)[0] : profile.name;
 
-  // 7-day streak calculation strictly derived from real completed tasks and journal entries
+  // 7-day streak calculation strictly derived from real completed tasks
   const getPastSevenDays = () => {
     const days = [];
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -145,8 +129,7 @@ export const MasterDashboard: React.FC<Props> = ({
       const dayName = dayLabels[d.getDay()];
 
       const hasCompletedTask = tasks.some(t => t.completed && t.dateStr === dateStr);
-      const hasJournalEntry = journalEntries.some(j => j.dateStr === dateStr);
-      const isDone = hasCompletedTask || hasJournalEntry;
+      const isDone = hasCompletedTask;
 
       days.push({
         dayName,
@@ -325,30 +308,30 @@ export const MasterDashboard: React.FC<Props> = ({
       {/* 1. Hero Header with Separated Profile Photo & Taller Flat Inline Search Bar */}
       <View style={styles.heroHeaderSection}>
         <View style={styles.headerTopRow}>
-          {/* Standalone User Icon / Profile Photo */}
-          <TouchableOpacity
-            style={styles.profileAvatarStandalone}
-            onPress={() => {
-              triggerHaptic.lightImpact();
-              if (onOpenEditProfile) {
-                onOpenEditProfile();
-              } else {
-                onOpenLogModal();
-              }
-            }}
-            activeOpacity={0.85}
-          >
-            {profile.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} style={styles.profileAvatarImage} />
-            ) : (
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80' }}
-                style={styles.profileAvatarImage}
-              />
-            )}
-          </TouchableOpacity>
+          {/* Standalone User Icon / Profile Photo — hide in search mode */}
+          {!isSearchFocused && searchQuery.length === 0 && (
+            <TouchableOpacity
+              style={styles.profileAvatarStandalone}
+              onPress={() => {
+                triggerHaptic.lightImpact();
+                if (onOpenEditProfile) {
+                  onOpenEditProfile();
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              {profile.avatarUrl ? (
+                <Image source={{ uri: profile.avatarUrl }} style={styles.profileAvatarImage} />
+              ) : (
+                <Image
+                  source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80' }}
+                  style={styles.profileAvatarImage}
+                />
+              )}
+            </TouchableOpacity>
+          )}
 
-          {/* Standalone Flat Inline Search Bar (Pure White Background on Click/Focus, No Outer Borders) */}
+          {/* Standalone Flat Inline Search Bar */}
           <View
             style={[
               styles.googleSearchBarContainer,
@@ -430,7 +413,6 @@ export const MasterDashboard: React.FC<Props> = ({
                     if (item.type === 'Task') onNavigateTab('planner');
                     else if (item.type === 'Class') onNavigateTab('planner');
                     else if (item.type === 'Syllabus') onNavigateTab('ai');
-                    else if (item.type === 'Journal') onNavigateTab('journal');
                   }}
                 >
                   <View style={styles.resultMainInfo}>
@@ -470,8 +452,12 @@ export const MasterDashboard: React.FC<Props> = ({
               <Text style={[styles.streakDayLabelAbove, item.isToday && styles.streakDayLabelToday]}>
                 {item.dayName}
               </Text>
-              <View style={[styles.streakCircle, item.isToday && styles.streakCircleToday]}>
-                <Flame size={16} color={item.isDone ? '#F59E0B' : '#94A3B8'} />
+              <View style={[
+                styles.streakCircle,
+                item.isToday && styles.streakCircleToday,
+                item.isDone ? styles.streakCircleDone : styles.streakCircleMissed,
+              ]}>
+                <Text style={styles.streakEmojiIcon}>{item.isDone ? '🔥' : '😢'}</Text>
               </View>
             </View>
           ))}
@@ -748,9 +734,9 @@ export const MasterDashboard: React.FC<Props> = ({
           <Text style={styles.dockItemText}>Pomodoro</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenLogModal}>
-          <Sparkles size={15} color="#7C3AED" />
-          <Text style={styles.dockItemText}>Log Entry</Text>
+        <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenAddTask}>
+          <Plus size={15} color="#2563EB" />
+          <Text style={styles.dockItemText}>Add Task</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenSearch}>
@@ -818,7 +804,7 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   googleSearchBarContainerFocused: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F1F5F9',
     borderWidth: 0,
     borderColor: 'transparent',
     shadowColor: 'transparent',
@@ -1021,8 +1007,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     borderWidth: 1.5,
   },
+  streakCircleDone: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+    borderWidth: 1.5,
+  },
+  streakCircleMissed: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+  },
   streakEmojiIcon: {
-    fontSize: 19,
+    fontSize: 20,
   },
 
   dividerHairline: {
@@ -1255,9 +1251,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
   quickAddBtnText: {
     fontFamily: FONTS.groteskBold,
@@ -1363,7 +1359,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   evenScheduleChipTextActive: {
-    color: '#1A73E8',
+    color: '#0F172A',
   },
   evenScheduleChipTextMissedAlert: {
     color: '#DC2626',

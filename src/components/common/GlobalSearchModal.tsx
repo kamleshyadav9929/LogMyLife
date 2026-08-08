@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
-import { Task, TimetableSlot, SubjectProgress, JournalEntry, SearchResultItem } from '../../types';
+import { Task, TimetableSlot, SubjectProgress, SearchResultItem } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
@@ -15,8 +15,7 @@ interface Props {
   tasks: Task[];
   timetable: TimetableSlot[];
   syllabus: SubjectProgress[];
-  journalEntries: JournalEntry[];
-  onNavigate?: (tab: 'planner' | 'settings' | 'ai' | 'journal') => void;
+  onNavigate?: (tab: 'planner' | 'settings' | 'ai') => void;
 }
 
 export const GlobalSearchModal: React.FC<Props> = ({
@@ -26,7 +25,6 @@ export const GlobalSearchModal: React.FC<Props> = ({
   tasks,
   timetable,
   syllabus,
-  journalEntries,
   onNavigate,
 }) => {
   const [query, setQuery] = useState('');
@@ -77,19 +75,6 @@ export const GlobalSearchModal: React.FC<Props> = ({
         }
       });
     });
-
-    // Search Journal Entries
-    journalEntries.forEach((entry) => {
-      if (entry.reflections.toLowerCase().includes(q) || entry.wins.some((w) => w.toLowerCase().includes(q))) {
-        searchResults.push({
-          id: entry.id,
-          type: 'journal',
-          title: entry.reflections.slice(0, 50) + '...',
-          subtitle: `Journal Log • ${entry.dateStr} [Mood: ${entry.mood}]`,
-          dateStr: entry.dateStr,
-        });
-      }
-    });
   }
 
   const getTypeIcon = (type: SearchResultItem['type']) => {
@@ -100,8 +85,6 @@ export const GlobalSearchModal: React.FC<Props> = ({
         return <Clock size={16} color="#FFFFFF" />;
       case 'topic':
         return <BookOpen size={16} color="#FFFFFF" />;
-      case 'journal':
-        return <FileText size={16} color="#FFFFFF" />;
     }
   };
 
@@ -170,7 +153,6 @@ export const GlobalSearchModal: React.FC<Props> = ({
                     if (onNavigate) {
                       if (item.type === 'task') onNavigate('planner');
                       else if (item.type === 'class' || item.type === 'topic') onNavigate('ai');
-                      else if (item.type === 'journal') onNavigate('journal');
                     }
                   }}
                   activeOpacity={0.8}

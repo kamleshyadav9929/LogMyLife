@@ -70,15 +70,6 @@ export interface SubjectProgress {
   topicsList: { title: string; completed: boolean }[];
 }
 
-export interface JournalEntry {
-  id: string;
-  dateStr: string; // "YYYY-MM-DD"
-  mood: MoodType;
-  reflections: string;
-  wins: string[];
-  blockers: string[];
-}
-
 export interface AISyncResult {
   id: string;
   dateStr: string;
@@ -123,7 +114,7 @@ export interface PomodoroSession {
 
 export interface SearchResultItem {
   id: string;
-  type: 'task' | 'class' | 'topic' | 'journal';
+  type: 'task' | 'class' | 'topic';
   title: string;
   subtitle: string;
   category?: TaskCategory;

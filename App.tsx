@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, StatusBar, TouchableOpacity, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, JournalEntry, AISyncResult, UserGamification, UserCategory } from './src/types';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, UserCategory } from './src/types';
 import { Database } from './src/storage/db';
 import { THEMES, ThemeKey, ThemeConfig } from './src/theme/colors';
 import { FONTS } from './src/theme/typography';
 import { MasterDashboard } from './src/components/dashboard/MasterDashboard';
 import { DailyPlanner } from './src/components/planner/DailyPlanner';
 import { AnalyticsDashboard } from './src/components/analytics/AnalyticsDashboard';
-import { JournalView } from './src/components/journal/JournalView';
-import { PullToLogModal } from './src/components/common/PullToLogModal';
 import { AddTaskModal } from './src/components/common/AddTaskModal';
 import { PomodoroModal } from './src/components/common/PomodoroModal';
 import { GlobalSearchModal } from './src/components/common/GlobalSearchModal';
@@ -20,8 +18,9 @@ import { CategoryManagerModal } from './src/components/common/CategoryManagerMod
 import { StreakCalendarView } from './src/components/streak/StreakCalendarView';
 import { PomodoroView } from './src/components/pomodoro/PomodoroView';
 import { SettingsView } from './src/components/settings/SettingsView';
+import { HabitTrackerView } from './src/components/habits/HabitTrackerView';
 import { triggerHaptic } from './src/services/haptics';
-import { Calendar, CheckSquare, BarChart2, BookOpen, LayoutDashboard, CheckCircle2, User, Sparkles } from 'lucide-react-native';
+import { Calendar, CheckSquare, BarChart2, BookOpen, LayoutDashboard, CheckCircle2, User, Sparkles, Flame } from 'lucide-react-native';
 
 import { SpatialBackgroundProvider } from './src/components/common/SpatialBackgroundContext';
 import { SpatialBackgroundContainer } from './src/components/common/SpatialBackgroundContainer';
@@ -39,7 +38,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'planner' | 'settings' | 'ai' | 'journal' | 'streak' | 'pomodoro'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'planner' | 'settings' | 'ai' | 'streak' | 'pomodoro' | 'habits'>('overview');
   const [currentThemeKey, setCurrentThemeKey] = useState<ThemeKey>('pure_white');
 
   const theme: ThemeConfig = THEMES[currentThemeKey];
@@ -49,7 +48,6 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
   const [syllabus, setSyllabus] = useState<SubjectProgress[]>([]);
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [aiSyncResults, setAiSyncResults] = useState<AISyncResult[]>([]);
   const [categories, setCategories] = useState<UserCategory[]>([]);
   const [gamification, setGamification] = useState<UserGamification>({
@@ -63,7 +61,6 @@ export default function App() {
 
   // Modals & Toast
   const [selectedTimerTask, setSelectedTimerTask] = useState<Task | undefined>(undefined);
-  const [showPullLogModal, setShowPullLogModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showPomodoroModal, setShowPomodoroModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -90,7 +87,6 @@ export default function App() {
       const t = await Database.getTasks();
       const tt = await Database.getTimetable();
       const sys = await Database.getSyllabus();
-      const j = await Database.getJournalEntries();
       const ai = await Database.getAISyncResults();
       const g = await Database.getGamification();
       const cats = await Database.getCategories();
@@ -99,7 +95,6 @@ export default function App() {
       setTasks(t);
       setTimetable(tt);
       setSyllabus(sys);
-      setJournalEntries(j);
       setAiSyncResults(ai);
       setGamification(g);
       setCategories(cats);
@@ -185,7 +180,6 @@ export default function App() {
                   tasks={tasks}
                   timetable={timetable}
                   syllabus={syllabus}
-                  journalEntries={journalEntries}
                   aiSyncResults={aiSyncResults}
                   gamification={gamification}
                   categories={categories}
@@ -196,7 +190,6 @@ export default function App() {
                   onOpenAddTask={() => setShowAddTaskModal(true)}
                   onOpenPomodoro={() => setActiveTab('pomodoro')}
                   onOpenSearch={() => setShowSearchModal(true)}
-                  onOpenLogModal={() => setShowPullLogModal(true)}
                   onOpenEditProfile={() => setShowEditProfileModal(true)}
                   onOpenAchievements={() => setShowAchievementsModal(true)}
                   onOpenStreakModal={() => setActiveTab('streak')}
@@ -219,7 +212,6 @@ export default function App() {
                 <StreakCalendarView
                   theme={theme}
                   tasks={tasks}
-                  journalEntries={journalEntries}
                   gamification={gamification}
                   onBackToDashboard={() => setActiveTab('overview')}
                   onNavigateTab={(tab) => setActiveTab(tab)}
@@ -256,7 +248,6 @@ export default function App() {
               {activeTab === 'ai' && (
                 <AnalyticsDashboard
                   tasks={tasks}
-                  journalEntries={journalEntries}
                   syllabus={syllabus}
                   aiSyncResults={aiSyncResults}
                   theme={theme}
@@ -267,16 +258,10 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'journal' && (
-                <JournalView
-                  entries={journalEntries}
+              {activeTab === 'habits' && (
+                <HabitTrackerView
                   theme={theme}
-                  onSaveEntry={async (updated) => {
-                    setJournalEntries(updated);
-                    const g = await Database.getGamification();
-                    setGamification(g);
-                    triggerToast('Log saved! +75 XP earned 📓');
-                  }}
+                  onBackToDashboard={() => setActiveTab('overview')}
                 />
               )}
             </View>
@@ -359,23 +344,23 @@ export default function App() {
                 style={styles.googleNavItem}
                 onPress={() => {
                   triggerHaptic.lightImpact();
-                  setActiveTab('journal');
+                  setActiveTab('habits');
                 }}
                 activeOpacity={0.8}
               >
-                <View style={[styles.googleIconPill, activeTab === 'journal' && styles.googleIconPillActive]}>
-                  <Calendar
+                <View style={[styles.googleIconPill, activeTab === 'habits' && styles.googleIconPillActive]}>
+                  <Flame
                     size={20}
-                    color={activeTab === 'journal' ? '#1A73E8' : '#5F6368'}
+                    color={activeTab === 'habits' ? '#0F172A' : '#64748B'}
                   />
                 </View>
                 <Text
                   style={[
                     styles.googleNavLabel,
-                    activeTab === 'journal' && styles.googleNavLabelActive,
+                    activeTab === 'habits' && styles.googleNavLabelActive,
                   ]}
                 >
-                  Life Log
+                  Habits
                 </Text>
               </TouchableOpacity>
 
@@ -390,7 +375,7 @@ export default function App() {
                 <View style={[styles.googleIconPill, activeTab === 'settings' && styles.googleIconPillActive]}>
                   <User
                     size={20}
-                    color={activeTab === 'settings' ? '#2563EB' : '#64748B'}
+                    color={activeTab === 'settings' ? '#0F172A' : '#64748B'}
                   />
                 </View>
                 <Text
@@ -408,18 +393,6 @@ export default function App() {
       </SpatialBackgroundContainer>
 
       {/* Spatial Bottom Sheets */}
-      <PullToLogModal
-        visible={showPullLogModal}
-        onClose={() => setShowPullLogModal(false)}
-        entries={journalEntries}
-        theme={theme}
-        onSaveEntry={async (updated) => {
-          setJournalEntries(updated);
-          const g = await Database.getGamification();
-          setGamification(g);
-        }}
-      />
-
       <AddTaskModal
         visible={showAddTaskModal}
         onClose={() => setShowAddTaskModal(false)}
@@ -465,7 +438,6 @@ export default function App() {
         tasks={tasks}
         timetable={timetable}
         syllabus={syllabus}
-        journalEntries={journalEntries}
         onNavigate={(tab) => {
           setShowSearchModal(false);
           setActiveTab(tab);
@@ -484,7 +456,6 @@ export default function App() {
         onClose={() => setShowStreakModal(false)}
         theme={theme}
         tasks={tasks}
-        journalEntries={journalEntries}
         gamification={gamification}
       />
 
@@ -548,15 +519,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   googleIconPill: {
-    width: 52,
-    height: 28,
-    borderRadius: 14,
+    width: 50,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
   googleIconPillActive: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FCE7F3',
   },
   googleNavLabel: {
     fontFamily: FONTS.groteskMedium,

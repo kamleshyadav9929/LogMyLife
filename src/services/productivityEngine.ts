@@ -1,4 +1,4 @@
-import { Task, JournalEntry, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
+import { Task, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
 import { calculateDailyActivityScore } from './streakEngine';
 
 export interface ScoreBreakdown {
@@ -23,7 +23,6 @@ export interface DynamicInsight {
 
 export function calculateDetailedProductivityScore(
   tasks: Task[],
-  journalEntries: JournalEntry[],
   activityLogs: ActivityLog[],
   pomodoroSessions: PomodoroSession[],
   categories: UserCategory[],
@@ -33,7 +32,6 @@ export function calculateDetailedProductivityScore(
   const targetDateStr = dateStr || new Date().toISOString().split('T')[0];
 
   const dayTasks = tasks.filter(t => t.dateStr === targetDateStr);
-  const dayJournals = journalEntries.filter(j => j.dateStr === targetDateStr);
   const dayLogs = activityLogs.filter(l => l.dateStr === targetDateStr);
   const dayPomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(targetDateStr) && s.isCompleted);
 
@@ -82,15 +80,8 @@ export function calculateDetailedProductivityScore(
   else if (tagsUsed.size === 2) lifeBalance = 8;
   else if (tagsUsed.size === 1) lifeBalance = 4;
 
-  // 4. Reflection & Self-Awareness (max 15 pts)
-  let reflection = 0;
-  if (dayJournals.length > 0) {
-    const journal = dayJournals[0];
-    reflection += 10; // base for journal entry
-    if (journal.reflections && journal.reflections.length > 80) reflection += 3;
-    if (journal.wins && journal.wins.length > 0) reflection += Math.min(2, journal.wins.length);
-  }
-  reflection = Math.min(15, reflection);
+  // 4. Reflection & Self-Awareness (max 15 pts based on activity logs)
+  let reflection = Math.min(15, dayLogs.length * 5);
 
   // 5. Streak Bonus (max 10 pts)
   const streakBonus = Math.min(10, streakDays * 2);
@@ -109,7 +100,6 @@ export function calculateDetailedProductivityScore(
 
 export function generatePersonalizedInsights(
   tasks: Task[],
-  journalEntries: JournalEntry[],
   activityLogs: ActivityLog[],
   pomodoroSessions: PomodoroSession[],
   categories: UserCategory[],

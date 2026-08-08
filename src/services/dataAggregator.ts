@@ -1,10 +1,9 @@
-import { Task, JournalEntry, ActivityLog, PomodoroSession, UserCategory, SubjectProgress, AISyncResult } from '../types';
+import { Task, ActivityLog, PomodoroSession, UserCategory, SubjectProgress, AISyncResult } from '../types';
 
 export interface DailySnapshot {
   dateStr: string;
   tasks: Task[];
   completedTasks: Task[];
-  journal: JournalEntry | null;
   activityLogs: ActivityLog[];
   pomodoros: PomodoroSession[];
   totalFocusMins: number;
@@ -13,13 +12,11 @@ export interface DailySnapshot {
 export function getDailySnapshot(
   dateStr: string,
   tasks: Task[],
-  journalEntries: JournalEntry[],
   activityLogs: ActivityLog[],
   pomodoroSessions: PomodoroSession[]
 ): DailySnapshot {
   const dayTasks = tasks.filter(t => t.dateStr === dateStr);
   const completedTasks = dayTasks.filter(t => t.completed);
-  const journal = journalEntries.find(j => j.dateStr === dateStr) || null;
   const logs = activityLogs.filter(l => l.dateStr === dateStr);
   const pomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(dateStr) && s.isCompleted);
 
@@ -31,7 +28,6 @@ export function getDailySnapshot(
     dateStr,
     tasks: dayTasks,
     completedTasks,
-    journal,
     activityLogs: logs,
     pomodoros,
     totalFocusMins,

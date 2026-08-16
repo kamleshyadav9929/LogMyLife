@@ -47,12 +47,11 @@ interface Props {
   categories: UserCategory[];
   theme: ThemeConfig;
   onOpenEditProfile: () => void;
-  onCycleTheme: () => void;
   onCategoriesUpdated: (categories: UserCategory[]) => void;
   onClose?: () => void;
 }
 
-type SubPage = 'main' | 'categories' | 'notifications' | 'theme' | 'ai' | 'data';
+type SubPage = 'main' | 'categories' | 'notifications' | 'data';
 
 const TAG_OPTIONS: CategoryTag[] = ['productive', 'work', 'new_skill', 'fun', 'health', 'routine'];
 
@@ -70,7 +69,6 @@ export const SettingsView: React.FC<Props> = ({
   categories,
   theme,
   onOpenEditProfile,
-  onCycleTheme,
   onCategoriesUpdated,
   onClose,
 }) => {
@@ -85,20 +83,10 @@ export const SettingsView: React.FC<Props> = ({
   const [catColor, setCatColor] = useState(CATEGORY_COLOR_OPTIONS[0]);
   const [catIcon, setCatIcon] = useState<string>('briefcase');
 
-  // Gemini API Key State
-  const [apiKey, setApiKey] = useState('');
-  const [keySavedToast, setKeySavedToast] = useState(false);
-
   // Notification Preferences State
   const [dailyReminders, setDailyReminders] = useState(true);
   const [focusAlerts, setFocusAlerts] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
-
-  useEffect(() => {
-    Database.getGeminiApiKey().then((k) => {
-      if (k) setApiKey(k);
-    });
-  }, []);
 
   const firstName = profile.name ? profile.name.split(' ')[0] : 'User';
 
@@ -159,33 +147,33 @@ export const SettingsView: React.FC<Props> = ({
     onCategoriesUpdated(updated);
   };
 
-  const handleSaveApiKey = async () => {
-    triggerHaptic.notificationSuccess();
-    await Database.saveGeminiApiKey(apiKey.trim());
-    setKeySavedToast(true);
-    setTimeout(() => setKeySavedToast(false), 2500);
-  };
-
   const handleResetCategories = async () => {
     triggerHaptic.heavyImpact();
     const resetList = await Database.resetCategoriesToDefault();
     onCategoriesUpdated(resetList);
   };
 
-  // Helper Header for Sub-Pages
-  const renderSubPageHeader = (title: string, subtitle: string) => (
-    <View style={styles.subPageHeaderRow}>
-      <TouchableOpacity
-        style={styles.backBtn}
-        onPress={() => navigateTo('main')}
-        activeOpacity={0.7}
-      >
-        <ArrowLeft size={18} color={theme.textPrimary || '#0F172A'} />
-      </TouchableOpacity>
-      <View style={styles.subPageTitleBox}>
-        <Text style={[styles.mainHeading, { color: theme.textPrimary }]}>{title}</Text>
-        <Text style={[styles.mainSubheading, { color: theme.textMuted }]}>{subtitle}</Text>
+  // Helper Header for Sub-Pages (Matching Habit Tracker Header)
+  const renderSubPageHeader = (title: string, subtitle?: string, rightAction?: React.ReactNode) => (
+    <View style={styles.habitStyleHeaderWrapper}>
+      <View style={styles.habitStyleHeaderRow}>
+        <TouchableOpacity
+          style={styles.roundBackBtn}
+          onPress={() => navigateTo('main')}
+          activeOpacity={0.8}
+        >
+          <ArrowLeft size={18} color="#0F172A" />
+        </TouchableOpacity>
+
+        <View style={styles.titleRow}>
+          <Text style={styles.habitTitleText}>{title}</Text>
+        </View>
+
+        {rightAction || <View style={{ width: 38 }} />}
       </View>
+
+      {/* Hairline Divider below Header */}
+      <View style={styles.headerHairline} />
     </View>
   );
 
@@ -195,118 +183,114 @@ export const SettingsView: React.FC<Props> = ({
   if (activeSubPage === 'categories') {
     return (
       <View style={styles.outerWrapper}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderSubPageHeader('Manage Categories', 'Add, customize or edit your life categories')}
+        {renderSubPageHeader(
+          'Manage Categories',
+          undefined,
+          <TouchableOpacity
+            style={styles.neutralChipAddBtn}
+            onPress={handleOpenAddCategory}
+            activeOpacity={0.8}
+          >
+            <Plus size={15} color="#0F172A" strokeWidth={2.5} style={{ marginRight: 4 }} />
+            <Text style={styles.neutralChipAddBtnTxt}>Add</Text>
+          </TouchableOpacity>
+        )}
 
-          <View style={styles.subPageCard}>
-            <View style={styles.subPanelHeader}>
-              <Text style={styles.subPanelTitle}>Active Categories ({categories.length})</Text>
-              <TouchableOpacity style={styles.addCatBtn} onPress={handleOpenAddCategory}>
-                <Plus size={13} color="#FFFFFF" />
-                <Text style={styles.addCatBtnText}>Add Category</Text>
-              </TouchableOpacity>
-            </View>
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          {/* Category Form */}
+          {isCreatingCategory && (
+            <View style={styles.formBoxClean}>
+              <Text style={styles.formTitleClean}>
+                {editingCategory ? 'Edit Category' : 'New Category'}
+              </Text>
 
-            {/* Category Form */}
-            {isCreatingCategory && (
-              <View style={styles.formBox}>
-                <Text style={styles.formTitle}>
-                  {editingCategory ? 'Edit Category' : 'New Category'}
-                </Text>
+              <TextInput
+                style={styles.textInputClean}
+                value={catName}
+                onChangeText={setCatName}
+                placeholder="Category Name (e.g. Design, Gym, Coding)"
+                placeholderTextColor="#94A3B8"
+              />
 
-                <TextInput
-                  style={styles.textInput}
-                  value={catName}
-                  onChangeText={setCatName}
-                  placeholder="Category Name (e.g. Design, Gym, Coding)"
-                  placeholderTextColor="#8E918F"
-                />
-
-                <Text style={styles.fieldLabel}>Productivity Tag</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                  {TAG_OPTIONS.map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.tagPill, catTag === t && styles.tagPillActive]}
-                      onPress={() => setCatTag(t)}
-                    >
-                      <Text style={[styles.tagPillText, catTag === t && styles.tagPillTextActive]}>
-                        {TAG_LABELS[t].label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={styles.fieldLabel}>Icon</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                  {CATEGORY_ICON_OPTIONS.map((opt) => (
-                    <TouchableOpacity
-                      key={opt.name}
-                      style={[styles.iconChoice, catIcon === opt.name && styles.iconChoiceActive]}
-                      onPress={() => setCatIcon(opt.name)}
-                    >
-                      <CategoryIcon name={opt.name as CategoryIconName} size={16} color={catIcon === opt.name ? '#0B57D0' : '#444746'} />
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={styles.fieldLabel}>Color Accent</Text>
-                <View style={styles.colorRow}>
-                  {CATEGORY_COLOR_OPTIONS.map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[styles.colorSwatch, { backgroundColor: c }, catColor === c && styles.colorSwatchActive]}
-                      onPress={() => setCatColor(c)}
-                    >
-                      {catColor === c && <Check size={12} color="#FFFFFF" />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={styles.formActionRow}>
-                  <TouchableOpacity style={styles.cancelFormBtn} onPress={() => setIsCreatingCategory(false)}>
-                    <Text style={styles.cancelFormText}>Cancel</Text>
+              <Text style={styles.fieldLabelClean}>PRODUCTIVITY TAG</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                {TAG_OPTIONS.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.tagPillClean, catTag === t && styles.tagPillCleanActive]}
+                    onPress={() => setCatTag(t)}
+                  >
+                    <Text style={[styles.tagPillCleanText, catTag === t && styles.tagPillCleanTextActive]}>
+                      {TAG_LABELS[t].label}
+                    </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.saveFormBtn} onPress={handleSaveCategory}>
-                    <Text style={styles.saveFormText}>Save</Text>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.fieldLabelClean}>COLOR ACCENT</Text>
+              <View style={styles.colorRowClean}>
+                {CATEGORY_COLOR_OPTIONS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.colorSwatchClean, { backgroundColor: c }, catColor === c && styles.colorSwatchCleanActive]}
+                    onPress={() => setCatColor(c)}
+                  >
+                    {catColor === c && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
                   </TouchableOpacity>
-                </View>
+                ))}
               </View>
-            )}
 
-            {/* Category List */}
-            <View style={styles.catList}>
-              {categories.map((cat) => {
-                const tagMeta = TAG_LABELS[cat.tag] || { label: cat.tag, color: '#444746' };
-                return (
-                  <View key={cat.id} style={styles.catItemRow}>
-                    <View style={[styles.catIconBox, { backgroundColor: `${cat.color}15` }]}>
-                      <CategoryIcon name={(cat.icon || 'briefcase') as CategoryIconName} size={16} color={cat.color} />
-                    </View>
-                    <View style={styles.catInfo}>
-                      <Text style={styles.catNameText} numberOfLines={1}>{cat.name}</Text>
-                      <View style={[styles.tagBadge, { backgroundColor: `${tagMeta.color}15` }]}>
-                        <Text style={[styles.tagBadgeText, { color: tagMeta.color }]}>{tagMeta.label}</Text>
+              <View style={styles.formActionRowClean}>
+                <TouchableOpacity style={styles.cancelFormBtnClean} onPress={() => setIsCreatingCategory(false)}>
+                  <Text style={styles.cancelFormTextClean}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveFormBtnClean} onPress={handleSaveCategory}>
+                  <Text style={styles.saveFormTextClean}>Save Category</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Simple Flat Category List without outer box */}
+          <View style={styles.simpleFlatCatList}>
+            {categories.map((cat, index) => {
+              const tagMeta = TAG_LABELS[cat.tag] || { label: cat.tag, color: '#64748B' };
+              return (
+                <React.Fragment key={cat.id}>
+                  <View style={styles.simpleFlatCatRow}>
+                    {/* Minimalist Color Dot Indicator (No Logo Icon) */}
+                    <View style={[styles.colorDotIndicator, { backgroundColor: cat.color }]} />
+
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.catNameTextClean} numberOfLines={1}>{cat.name}</Text>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <Text style={styles.catTagMetaText}>{tagMeta.label}</Text>
                       </View>
                     </View>
-                    <View style={styles.catActions}>
-                      <TouchableOpacity style={styles.catActionBtn} onPress={() => handleOpenEditCategory(cat)}>
-                        <Edit2 size={13} color="#444746" />
+
+                    <View style={styles.catActionsClean}>
+                      <TouchableOpacity style={styles.roundActionBtnClean} onPress={() => handleOpenEditCategory(cat)}>
+                        <Edit2 size={15} color="#64748B" />
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.catActionBtn} onPress={() => handleDeleteCategory(cat.id)}>
-                        <Trash2 size={13} color="#BA1A1A" />
-                      </TouchableOpacity>
+                      {categories.length > 1 && (
+                        <TouchableOpacity style={[styles.roundActionBtnClean, { marginLeft: 6 }]} onPress={() => handleDeleteCategory(cat.id)}>
+                          <Trash2 size={15} color="#EF4444" />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
-                );
-              })}
-            </View>
 
-            <TouchableOpacity style={styles.resetCatBtn} onPress={handleResetCategories}>
-              <RefreshCw size={13} color="#444746" />
-              <Text style={styles.resetCatText}>Reset to Default Categories</Text>
-            </TouchableOpacity>
+                  {index < categories.length - 1 && <View style={styles.rowHairlineClean} />}
+                </React.Fragment>
+              );
+            })}
           </View>
+
+          <TouchableOpacity style={styles.resetCatBtnClean} onPress={handleResetCategories}>
+            <RefreshCw size={13} color="#64748B" />
+            <Text style={styles.resetCatTextClean}>Reset to Default Categories</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
@@ -318,14 +302,14 @@ export const SettingsView: React.FC<Props> = ({
   if (activeSubPage === 'notifications') {
     return (
       <View style={styles.outerWrapper}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderSubPageHeader('Notifications & Reminders', 'Configure daily log alerts & focus session prompts')}
+        {renderSubPageHeader('Notifications & Reminders')}
 
-          <View style={styles.subPageCard}>
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextGroup}>
-                <Text style={styles.switchTitle}>Daily Reflection Prompt</Text>
-                <Text style={styles.switchDesc}>Receive daily evening prompt to log your wins & mindset</Text>
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.simpleFlatCatList}>
+            <View style={styles.switchRowClean}>
+              <View style={styles.switchTextGroupClean}>
+                <Text style={styles.switchTitleClean}>Daily Reflection Prompt</Text>
+                <Text style={styles.switchDescClean}>Receive daily evening prompt to log your wins & mindset</Text>
               </View>
               <Switch
                 value={dailyReminders}
@@ -333,17 +317,17 @@ export const SettingsView: React.FC<Props> = ({
                   triggerHaptic.lightImpact();
                   setDailyReminders(val);
                 }}
-                trackColor={{ false: '#E0E0E0', true: '#D3E3FD' }}
-                thumbColor={dailyReminders ? '#0B57D0' : '#8E918F'}
+                trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
+                thumbColor={dailyReminders ? '#2563EB' : '#94A3B8'}
               />
             </View>
 
-            <View style={styles.divider} />
+            <View style={styles.rowHairlineClean} />
 
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextGroup}>
-                <Text style={styles.switchTitle}>Focus Session Alerts</Text>
-                <Text style={styles.switchDesc}>Alerts when Pomodoro focus timers complete</Text>
+            <View style={styles.switchRowClean}>
+              <View style={styles.switchTextGroupClean}>
+                <Text style={styles.switchTitleClean}>Focus Session Alerts</Text>
+                <Text style={styles.switchDescClean}>Alerts when Pomodoro focus timers complete</Text>
               </View>
               <Switch
                 value={focusAlerts}
@@ -351,17 +335,17 @@ export const SettingsView: React.FC<Props> = ({
                   triggerHaptic.lightImpact();
                   setFocusAlerts(val);
                 }}
-                trackColor={{ false: '#E0E0E0', true: '#D3E3FD' }}
-                thumbColor={focusAlerts ? '#0B57D0' : '#8E918F'}
+                trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
+                thumbColor={focusAlerts ? '#2563EB' : '#94A3B8'}
               />
             </View>
 
-            <View style={styles.divider} />
+            <View style={styles.rowHairlineClean} />
 
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextGroup}>
-                <Text style={styles.switchTitle}>Sound & Haptics</Text>
-                <Text style={styles.switchDesc}>Haptic feedback on task completions and logs</Text>
+            <View style={styles.switchRowClean}>
+              <View style={styles.switchTextGroupClean}>
+                <Text style={styles.switchTitleClean}>Sound & Haptics</Text>
+                <Text style={styles.switchDescClean}>Haptic feedback on task completions and logs</Text>
               </View>
               <Switch
                 value={soundEffects}
@@ -369,87 +353,10 @@ export const SettingsView: React.FC<Props> = ({
                   triggerHaptic.lightImpact();
                   setSoundEffects(val);
                 }}
-                trackColor={{ false: '#E0E0E0', true: '#D3E3FD' }}
-                thumbColor={soundEffects ? '#0B57D0' : '#8E918F'}
+                trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
+                thumbColor={soundEffects ? '#2563EB' : '#94A3B8'}
               />
             </View>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ----------------------------------------------------
-  // SUB-PAGE 3: APPEARANCE & THEME
-  // ----------------------------------------------------
-  if (activeSubPage === 'theme') {
-    return (
-      <View style={styles.outerWrapper}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderSubPageHeader('Appearance & Theme', 'Customize visual themes and palette preferences')}
-
-          <View style={styles.subPageCard}>
-            <TouchableOpacity style={styles.themeOptionCard} onPress={onCycleTheme} activeOpacity={0.8}>
-              <View style={styles.themeOptionHeader}>
-                <Sun size={20} color="#0B57D0" />
-                <Text style={styles.themeOptionTitle}>Pure Minimalist White</Text>
-              </View>
-              <Text style={styles.themeOptionDesc}>Clean white background with slate typography and vibrant color accents.</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.themeOptionCard} onPress={onCycleTheme} activeOpacity={0.8}>
-              <View style={styles.themeOptionHeader}>
-                <Moon size={20} color="#7C3AED" />
-                <Text style={styles.themeOptionTitle}>Slate Light</Text>
-              </View>
-              <Text style={styles.themeOptionDesc}>Soft slate backdrop with elevated material cards for reduced eye strain.</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cycleThemeFullBtn} onPress={onCycleTheme}>
-              <Palette size={16} color="#FFFFFF" />
-              <Text style={styles.cycleThemeFullBtnText}>Cycle Visual Theme</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ----------------------------------------------------
-  // SUB-PAGE 4: GEMINI AI INTEGRATION
-  // ----------------------------------------------------
-  if (activeSubPage === 'ai') {
-    return (
-      <View style={styles.outerWrapper}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderSubPageHeader('Gemini AI Integration', 'Configure custom API key for schedule AI replanning')}
-
-          <View style={styles.subPageCard}>
-            <Text style={styles.subPanelDesc}>
-              Enter your Gemini API key to unlock automated schedule generation, daily workload balancing, and reflection summaries.
-            </Text>
-
-            <View style={styles.apiKeyBox}>
-              <TextInput
-                style={styles.apiKeyInput}
-                value={apiKey}
-                onChangeText={setApiKey}
-                placeholder="Paste Gemini API key (AIzaSy...)"
-                placeholderTextColor="#8E918F"
-                secureTextEntry
-              />
-              <TouchableOpacity style={styles.saveKeyBtn} onPress={handleSaveApiKey}>
-                <Key size={13} color="#FFFFFF" />
-                <Text style={styles.saveKeyText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-
-            {keySavedToast && (
-              <View style={styles.toastNotice}>
-                <ShieldCheck size={14} color="#2E7D32" />
-                <Text style={styles.toastNoticeText}>Gemini API key saved successfully!</Text>
-              </View>
-            )}
           </View>
         </ScrollView>
       </View>
@@ -462,17 +369,17 @@ export const SettingsView: React.FC<Props> = ({
   if (activeSubPage === 'data') {
     return (
       <View style={styles.outerWrapper}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderSubPageHeader('Data & Storage', 'Manage local offline storage and dataset backups')}
+        {renderSubPageHeader('Data & Storage')}
 
-          <View style={styles.subPageCard}>
-            <Text style={styles.subPanelDesc}>
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.simpleFlatCatList}>
+            <Text style={styles.subPanelDescClean}>
               LogMyLife runs 100% offline with local storage adapter. You can reset categories or manage local state below.
             </Text>
 
-            <TouchableOpacity style={styles.dataActionBtn} onPress={handleResetCategories}>
-              <RefreshCw size={14} color="#1F1F1F" />
-              <Text style={styles.dataActionText}>Reset Categories to Default System</Text>
+            <TouchableOpacity style={styles.resetCatBtnClean} onPress={handleResetCategories}>
+              <RefreshCw size={14} color="#0F172A" />
+              <Text style={styles.resetCatTextClean}>Reset Categories to Default System</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -485,29 +392,30 @@ export const SettingsView: React.FC<Props> = ({
   // ----------------------------------------------------
   return (
     <View style={styles.outerWrapper}>
-      {/* Top Close Bar if inside a modal */}
-      {onClose && (
-        <View style={styles.topBar}>
-          <View style={styles.topBarSpacer} />
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-            <X size={22} color="#1F1F1F" />
-          </TouchableOpacity>
+      {/* Header matching Planner page header layout */}
+      <View style={styles.plannerHeaderRow}>
+        <View style={styles.plannerHeaderLeftRow}>
+          <View>
+            <Text style={styles.plannerHeaderTitle}>Settings</Text>
+            <Text style={styles.plannerHeaderSubtitle}>Manage categories & app preferences</Text>
+          </View>
         </View>
-      )}
+
+        {onClose && (
+          <TouchableOpacity onPress={onClose} style={styles.roundBackBtn} activeOpacity={0.8}>
+            <X size={18} color="#0F172A" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Hairline Divider below Header */}
+      <View style={styles.headerHairline} />
 
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Clean Minimal Section Header with Faint Header Underline */}
-        <View style={styles.topTitleHeader}>
-          <Text style={[styles.mainHeading, { color: theme.textPrimary }]}>Settings</Text>
-          <Text style={[styles.mainSubheading, { color: theme.textMuted }]}>
-            Manage categories & app preferences
-          </Text>
-        </View>
-
         {/* Centered User Avatar & Name */}
         <View style={styles.headerBlock}>
           <TouchableOpacity
@@ -523,7 +431,7 @@ export const SettingsView: React.FC<Props> = ({
               )}
             </View>
             <View style={styles.cameraBadge}>
-              <Camera size={12} color="#1F1F1F" />
+              <Camera size={12} color="#0F172A" />
             </View>
           </TouchableOpacity>
 
@@ -541,17 +449,17 @@ export const SettingsView: React.FC<Props> = ({
         {/* Section Label */}
         <Text style={styles.sectionHeaderLabel}>App preferences & data</Text>
 
-        {/* Google Material List Container */}
-        <View style={styles.materialCard}>
-          {/* ROW 1: MANAGE CATEGORIES (Navigates to dedicated Categories Sub-Page!) */}
+        {/* Clean Flat List Container */}
+        <View style={styles.simpleFlatCatList}>
+          {/* ROW 1: MANAGE CATEGORIES */}
           <TouchableOpacity
-            style={styles.rowItem}
+            style={styles.simpleFlatCatRow}
             onPress={() => navigateTo('categories')}
             activeOpacity={0.7}
           >
             <View style={styles.rowLeft}>
-              <LayoutGrid size={20} color="#1F1F1F" style={styles.rowIcon} />
-              <Text style={styles.rowLabel} numberOfLines={1}>
+              <LayoutGrid size={18} color="#0F172A" style={styles.rowIcon} />
+              <Text style={styles.rowLabelClean} numberOfLines={1}>
                 Manage Categories
               </Text>
             </View>
@@ -560,89 +468,46 @@ export const SettingsView: React.FC<Props> = ({
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>{categories.length}</Text>
               </View>
-              <ChevronRight size={20} color="#444746" />
+              <ChevronRight size={18} color="#64748B" />
             </View>
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={styles.rowHairlineClean} />
 
-          {/* ROW 2: NOTIFICATIONS & OFFERS (Navigates to dedicated Notifications Sub-Page!) */}
+          {/* ROW 2: NOTIFICATIONS & REMINDERS */}
           <TouchableOpacity
-            style={styles.rowItem}
+            style={styles.simpleFlatCatRow}
             onPress={() => navigateTo('notifications')}
             activeOpacity={0.7}
           >
             <View style={styles.rowLeft}>
-              <Bell size={20} color="#1F1F1F" style={styles.rowIcon} />
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                Notifications & reminders
+              <Bell size={18} color="#0F172A" style={styles.rowIcon} />
+              <Text style={styles.rowLabelClean} numberOfLines={1}>
+                Notifications & Reminders
               </Text>
             </View>
             <View style={styles.rowRight}>
               <Text style={styles.sideValueText}>{dailyReminders ? '1' : '0'}</Text>
-              <ChevronRight size={20} color="#444746" />
+              <ChevronRight size={18} color="#64748B" />
             </View>
           </TouchableOpacity>
 
-          <View style={styles.divider} />
+          <View style={styles.rowHairlineClean} />
 
-          {/* ROW 3: APPEARANCE & THEME (Navigates to dedicated Appearance Sub-Page!) */}
+          {/* ROW 3: DATA & STORAGE */}
           <TouchableOpacity
-            style={styles.rowItem}
-            onPress={() => navigateTo('theme')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowLeft}>
-              <Palette size={20} color="#1F1F1F" style={styles.rowIcon} />
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                Appearance & theme
-              </Text>
-            </View>
-            <View style={styles.rowRight}>
-              <ChevronRight size={20} color="#444746" />
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          {/* ROW 4: GEMINI AI INTEGRATION (Navigates to dedicated Gemini AI Sub-Page!) */}
-          <TouchableOpacity
-            style={styles.rowItem}
-            onPress={() => navigateTo('ai')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowLeft}>
-              <Sparkles size={20} color="#1F1F1F" style={styles.rowIcon} />
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                Gemini AI integration
-              </Text>
-            </View>
-            <View style={styles.rowRight}>
-              <View style={[styles.statusBadge, { backgroundColor: apiKey ? '#E8F5E9' : '#FFF3E0' }]}>
-                <Text style={[styles.statusBadgeText, { color: apiKey ? '#2E7D32' : '#E65100' }]}>
-                  {apiKey ? 'Active' : 'Setup'}
-                </Text>
-              </View>
-              <ChevronRight size={20} color="#444746" />
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          {/* ROW 5: DATA & STORAGE (Navigates to dedicated Data & Storage Sub-Page!) */}
-          <TouchableOpacity
-            style={styles.rowItem}
+            style={styles.simpleFlatCatRow}
             onPress={() => navigateTo('data')}
             activeOpacity={0.7}
           >
             <View style={styles.rowLeft}>
-              <HardDrive size={20} color="#1F1F1F" style={styles.rowIcon} />
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                Data & storage
+              <HardDrive size={18} color="#0F172A" style={styles.rowIcon} />
+              <Text style={styles.rowLabelClean} numberOfLines={1}>
+                Data & Storage
               </Text>
             </View>
             <View style={styles.rowRight}>
-              <ChevronRight size={20} color="#444746" />
+              <ChevronRight size={18} color="#64748B" />
             </View>
           </TouchableOpacity>
         </View>
@@ -654,7 +519,7 @@ export const SettingsView: React.FC<Props> = ({
 const styles = StyleSheet.create({
   outerWrapper: {
     flex: 1,
-    backgroundColor: '#EEF2F9',
+    backgroundColor: '#FFFFFF',
   },
   topBar: {
     flexDirection: 'row',
@@ -1184,5 +1049,262 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     fontSize: 13,
     color: '#1F1F1F',
+  },
+  // Habit Tracker Style Header & Simple Icon-less Category Styles
+  plannerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 18 : 18,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  plannerHeaderLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  plannerHeaderTitle: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 18,
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  plannerHeaderSubtitle: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  habitStyleHeaderWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  habitStyleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  roundBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  habitTitleText: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 18,
+    color: '#0F172A',
+  },
+  headerHairline: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  neutralChipAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 0,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  neutralChipAddBtnTxt: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#0F172A',
+  },
+  simpleFlatCatList: {
+    paddingVertical: 4,
+  },
+  simpleFlatCatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  colorDotIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  catNameTextClean: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  catTagMetaText: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  catActionsClean: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  roundActionBtnClean: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowHairlineClean: {
+    height: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  resetCatBtnClean: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+  },
+  resetCatTextClean: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  formBoxClean: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  formTitleClean: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  textInputClean: {
+    fontFamily: FONTS.groteskMedium,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    backgroundColor: '#FFFFFF',
+    color: '#0F172A',
+  },
+  fieldLabelClean: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: '#64748B',
+    marginTop: 4,
+  },
+  tagPillClean: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginRight: 6,
+  },
+  tagPillCleanActive: {
+    backgroundColor: '#FCE7F3',
+  },
+  tagPillCleanText: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  tagPillCleanTextActive: {
+    color: '#BE185D',
+  },
+  colorRowClean: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  colorSwatchClean: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorSwatchCleanActive: {
+    borderWidth: 2,
+    borderColor: '#0F172A',
+  },
+  formActionRowClean: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  cancelFormBtnClean: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+  },
+  cancelFormTextClean: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#475569',
+  },
+  saveFormBtnClean: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+  },
+  saveFormTextClean: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#FFFFFF',
+  },
+  switchRowClean: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  switchTextGroupClean: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  switchTitleClean: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  switchDescClean: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  subPanelDescClean: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginVertical: 8,
+  },
+  rowLabelClean: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 14,
+    color: '#0F172A',
   },
 });

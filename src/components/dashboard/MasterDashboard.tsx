@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, TextInput } from 'react-native';
 import Svg, { G, Circle } from 'react-native-svg';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, UserCategory } from '../../types';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserCategory } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
@@ -17,6 +17,9 @@ import {
   ListTodo,
   Mic,
   X,
+  Timer,
+  PlusCircle,
+  ArrowRight,
 } from 'lucide-react-native';
 
 const MONO_FONT = Platform.select({
@@ -31,15 +34,14 @@ interface Props {
   timetable: TimetableSlot[];
   syllabus: SubjectProgress[];
   aiSyncResults: AISyncResult[];
-  gamification: UserGamification;
   categories: UserCategory[];
   theme: ThemeConfig;
-  onNavigateTab: (tab: 'planner' | 'ai') => void;
+  onNavigateTab: (tab: 'planner' | 'ai' | 'habits') => void;
   onOpenAddTask: () => void;
+  onOpenAddHabit?: () => void;
   onOpenPomodoro: () => void;
   onOpenSearch: () => void;
   onOpenEditProfile?: () => void;
-  onOpenAchievements?: () => void;
   onOpenStreakModal?: () => void;
   onOpenCategoryManager?: () => void;
   onQuickCompleteTask?: (taskId: string) => void;
@@ -51,20 +53,19 @@ export const MasterDashboard: React.FC<Props> = ({
   timetable,
   syllabus,
   aiSyncResults,
-  gamification,
   categories,
   theme,
   onNavigateTab,
   onOpenAddTask,
+  onOpenAddHabit,
   onOpenPomodoro,
   onOpenSearch,
   onOpenEditProfile,
-  onOpenAchievements,
   onOpenStreakModal,
   onOpenCategoryManager,
   onQuickCompleteTask,
 }) => {
-  const [analyticsFilter, setAnalyticsFilter] = useState<'day' | 'week' | 'month'>('day');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [dashboardScheduleTab, setDashboardScheduleTab] = useState<'upcoming' | 'missed' | 'completed'>('upcoming');
@@ -116,6 +117,16 @@ export const MasterDashboard: React.FC<Props> = ({
   // Name extraction (e.g. Rao / Ashok)
   const displayName = profile.name.split(' ').length > 1 ? profile.name.split(' ').slice(-1)[0] : profile.name;
 
+  const getTodayDateStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const date = d.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${date}`;
+  };
+
+  const todayDateStr = getTodayDateStr();
+
   // 7-day streak calculation strictly derived from real completed tasks
   const getPastSevenDays = () => {
     const days = [];
@@ -143,12 +154,8 @@ export const MasterDashboard: React.FC<Props> = ({
 
   const streakDaysData = getPastSevenDays();
 
-  // Analytics Calculations based on Day, Week, Month
+  // Analytics Calculations strictly for Today's Data
   const getAnalyticsData = () => {
-    let multiplier = 1;
-    if (analyticsFilter === 'week') multiplier = 5.5;
-    if (analyticsFilter === 'month') multiplier = 22;
-
     const defaultCatList = [
       { id: 'cat-work', name: 'Work & Projects', color: '#2563EB' },
       { id: 'cat-learning', name: 'Learning & Skills', color: '#7C3AED' },
@@ -161,16 +168,18 @@ export const MasterDashboard: React.FC<Props> = ({
       ? categories.map(c => ({ id: c.id, name: c.name, color: c.color }))
       : defaultCatList;
 
+    const todayTasks = tasks.filter(t => !t.dateStr || t.dateStr === todayDateStr);
+
     const baseData = activeCategories.map(cat => {
       const mins = Math.round(
-        tasks
+        todayTasks
           .filter(t => t.completed && (
             t.category === cat.id ||
             t.category === cat.name ||
             (cat.name === 'Learning & Skills' && (t.category === 'DSA' || t.category === 'Study')) ||
             (cat.name === 'Work & Projects' && (t.category === 'College' || t.category === 'Work'))
           ))
-          .reduce((acc, t) => acc + (t.durationMins || 60), 0) * multiplier
+          .reduce((acc, t) => acc + (t.durationMins || 60), 0)
       );
       return {
         name: cat.name,
@@ -267,15 +276,6 @@ export const MasterDashboard: React.FC<Props> = ({
     Wastage: '#EF4444',
   };
 
-  const getTodayDateStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const date = d.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${date}`;
-  };
-
-  const todayDateStr = getTodayDateStr();
   const currentNow = new Date();
   const currentHourDec = currentNow.getHours() + currentNow.getMinutes() / 60;
 
@@ -429,332 +429,311 @@ export const MasterDashboard: React.FC<Props> = ({
         </View>
       ) : (
         <>
-          {/* 2. Last 7 Days Streak (Centered Bold Heading with Google Arrow on right to open Month Calendar) */}
-          <View style={styles.streakSection}>
-        <TouchableOpacity
-          style={styles.streakHeaderRowTouchable}
-          onPress={() => {
-            triggerHaptic.lightImpact();
-            if (onOpenStreakModal) onOpenStreakModal();
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.streakHeaderSpacer} />
-          <Text style={[styles.largeBoldCenteredHeading, { flex: 1 }]}>LAST 7 DAYS STREAK</Text>
-          <View style={styles.googleStreakArrowCircle}>
-            <ChevronRight size={16} color="#2563EB" />
-          </View>
-        </TouchableOpacity>
+          {/* 2. World-Class Quick Tiles Deck (2x2 Grid of Premium Soft-Fill Cards) */}
+          <View style={styles.quickTilesDeckContainer}>
+            <Text style={styles.quickTilesHeaderTitle}>QUICK ACTIONS</Text>
 
-        <View style={styles.streakRow}>
-          {streakDaysData.map((item, idx) => (
-            <View key={idx} style={styles.streakCol}>
-              <Text style={[styles.streakDayLabelAbove, item.isToday && styles.streakDayLabelToday]}>
-                {item.dayName}
-              </Text>
-              <View style={[
-                styles.streakCircle,
-                item.isToday && styles.streakCircleToday,
-                item.isDone ? styles.streakCircleDone : styles.streakCircleMissed,
-              ]}>
-                <Text style={styles.streakEmojiIcon}>{item.isDone ? '🔥' : '😢'}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.dividerHairline} />
-
-      {/* 3. Analytics Section (Centered Bold Heading, Frameless) */}
-      <View style={styles.framelessSection}>
-        <View style={styles.centeredSectionHeader}>
-          <Text style={styles.largeBoldCenteredHeading}>ANALYTICS</Text>
-
-          {/* 3 Chips: Day, Week, Month */}
-          <View style={styles.chipsContainerCentered}>
-            <TouchableOpacity
-              style={[styles.chipButton, analyticsFilter === 'day' && styles.chipActive]}
-              onPress={() => {
-                triggerHaptic.lightImpact();
-                setAnalyticsFilter('day');
-              }}
-            >
-              <Text style={[styles.chipText, analyticsFilter === 'day' && styles.chipTextActive]}>Day</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.chipButton, analyticsFilter === 'week' && styles.chipActive]}
-              onPress={() => {
-                triggerHaptic.lightImpact();
-                setAnalyticsFilter('week');
-              }}
-            >
-              <Text style={[styles.chipText, analyticsFilter === 'week' && styles.chipTextActive]}>Week</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.chipButton, analyticsFilter === 'month' && styles.chipActive]}
-              onPress={() => {
-                triggerHaptic.lightImpact();
-                setAnalyticsFilter('month');
-              }}
-            >
-              <Text style={[styles.chipText, analyticsFilter === 'month' && styles.chipTextActive]}>Month</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Side-by-Side: Total Logged Pie Chart on Left, Compact Categories List on Right */}
-        <View style={styles.analyticsSideBySideRow}>
-          {/* LEFT: Pie / Donut Chart with Total Time in Center */}
-          <View style={styles.chartCenterWrapper}>
-            <View style={styles.svgContainer}>
-              <Svg width={meterSize} height={meterSize} viewBox={`0 0 ${meterSize} ${meterSize}`}>
-                <G rotation="-90" origin={`${meterCenter}, ${meterCenter}`}>
-                  <Circle
-                    cx={meterCenter}
-                    cy={meterCenter}
-                    r={meterRadius}
-                    stroke="#F1F5F9"
-                    strokeWidth={strokeWidth}
-                    fill="transparent"
-                  />
-                  {donutSegments.map((segment, index) => (
-                    <Circle
-                      key={index}
-                      cx={meterCenter}
-                      cy={meterCenter}
-                      r={meterRadius}
-                      stroke={segment.color}
-                      strokeWidth={strokeWidth}
-                      strokeDasharray={segment.strokeDasharray}
-                      strokeDashoffset={segment.strokeDashoffset}
-                      strokeLinecap="round"
-                      fill="transparent"
-                    />
-                  ))}
-                </G>
-              </Svg>
-
-              <View style={styles.donutCenterOverlayMeter}>
-                <Text style={styles.totalTimeCenterValMeter}>{analytics.formattedTotalTime}</Text>
-                <Text style={styles.totalTimeCenterLabelMeter}>TOTAL LOGGED</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* RIGHT: Compact Categories & Time List (Unboxed, Small Font, Flat Rows) */}
-          <View style={styles.sideCategoryList}>
-            {analytics.categories.map((cat, idx) => (
-              <View key={idx} style={styles.sideCategoryRowItem}>
-                <View style={styles.catLeftInfo}>
-                  <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
-                  <Text style={styles.compactCategoryNameText} numberOfLines={1}>
-                    {cat.name}
-                  </Text>
+            <View style={styles.quickTilesGridRow}>
+              {/* TILE 1: POMODORO TIMER */}
+              <TouchableOpacity
+                style={[styles.quickTileCard, { backgroundColor: '#F0FDF4' }]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  onOpenPomodoro();
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.tileIconCircle, { backgroundColor: '#DCFCE7' }]}>
+                  <Timer size={18} color="#166534" />
                 </View>
+                <View style={styles.tileTextContent}>
+                  <Text style={styles.tileTitleText}>Pomodoro</Text>
+                  <Text style={[styles.tileSubText, { color: '#15803D' }]}>Focus Session</Text>
+                </View>
+              </TouchableOpacity>
 
-                <View style={styles.catRightInfo}>
-                  <Text style={styles.compactCategoryTimeVal}>{cat.formattedTime}</Text>
+              {/* TILE 2: ADD TASK */}
+              <TouchableOpacity
+                style={[styles.quickTileCard, { backgroundColor: '#EFF6FF' }]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  onOpenAddTask();
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.tileIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                  <Plus size={18} color="#1E40AF" strokeWidth={2.5} />
+                </View>
+                <View style={styles.tileTextContent}>
+                  <Text style={styles.tileTitleText}>Add Task</Text>
+                  <Text style={[styles.tileSubText, { color: '#1D4ED8' }]}>New Schedule</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.quickTilesGridRow}>
+              {/* TILE 3: QUICK SEARCH */}
+              <TouchableOpacity
+                style={[styles.quickTileCard, { backgroundColor: '#F8FAFC' }]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  onOpenSearch();
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.tileIconCircle, { backgroundColor: '#E2E8F0' }]}>
+                  <Search size={18} color="#334155" />
+                </View>
+                <View style={styles.tileTextContent}>
+                  <Text style={styles.tileTitleText}>Search</Text>
+                  <Text style={[styles.tileSubText, { color: '#64748B' }]}>Find Logs</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* TILE 4: ADD HABIT */}
+              <TouchableOpacity
+                style={[styles.quickTileCard, { backgroundColor: '#FDF2F8' }]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  if (onOpenAddHabit) {
+                    onOpenAddHabit();
+                  } else {
+                    onNavigateTab('habits');
+                  }
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={[styles.tileIconCircle, { backgroundColor: '#FBCFE8' }]}>
+                  <PlusCircle size={18} color="#BE185D" />
+                </View>
+                <View style={styles.tileTextContent}>
+                  <Text style={styles.tileTitleText}>Add Habit</Text>
+                  <Text style={[styles.tileSubText, { color: '#BE185D' }]}>New Tracker</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.dividerHairline} />
+
+          {/* 3. Analytics Section (Centered Title & Soft Arrow Button, Color Filled Card) */}
+          <View style={styles.filledSectionCard}>
+            <View style={styles.centeredSectionHeaderRow}>
+              <Text style={styles.sectionHeaderTitleCentered}>ANALYTICS</Text>
+              <TouchableOpacity
+                style={styles.headerArrowBtnSoftPos}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  onNavigateTab('ai');
+                }}
+                activeOpacity={0.8}
+              >
+                <ArrowRight size={16} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Side-by-Side: Total Logged Pie Chart on Left, Compact Categories List on Right */}
+            <View style={styles.analyticsSideBySideRow}>
+              {/* LEFT: Pie / Donut Chart with Total Time in Center */}
+              <View style={styles.chartCenterWrapper}>
+                <View style={styles.svgContainer}>
+                  <Svg width={meterSize} height={meterSize} viewBox={`0 0 ${meterSize} ${meterSize}`}>
+                    <G rotation="-90" origin={`${meterCenter}, ${meterCenter}`}>
+                      <Circle
+                        cx={meterCenter}
+                        cy={meterCenter}
+                        r={meterRadius}
+                        stroke="#E2E8F0"
+                        strokeWidth={strokeWidth}
+                        fill="transparent"
+                      />
+                      {donutSegments.map((segment, index) => (
+                        <Circle
+                          key={index}
+                          cx={meterCenter}
+                          cy={meterCenter}
+                          r={meterRadius}
+                          stroke={segment.color}
+                          strokeWidth={strokeWidth}
+                          strokeDasharray={segment.strokeDasharray}
+                          strokeDashoffset={segment.strokeDashoffset}
+                          strokeLinecap="round"
+                          fill="transparent"
+                        />
+                      ))}
+                    </G>
+                  </Svg>
+
+                  <View style={styles.donutCenterOverlayMeter}>
+                    <Text style={styles.totalTimeCenterValMeter}>{analytics.formattedTotalTime}</Text>
+                    <Text style={styles.totalTimeCenterLabelMeter}>TOTAL LOGGED</Text>
+                  </View>
                 </View>
               </View>
-            ))}
-          </View>
-        </View>
 
-        {/* Faint Line ONLY Below Categories */}
-        <View style={styles.categoriesFaintBottomDivider} />
+              {/* RIGHT: Compact Categories & Time List (Unboxed, Small Font, Flat Rows) */}
+              <View style={styles.sideCategoryList}>
+                {analytics.categories.map((cat, idx) => (
+                  <View key={idx} style={styles.sideCategoryRowItem}>
+                    <View style={styles.catLeftInfo}>
+                      <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
+                      <Text style={styles.compactCategoryNameText} numberOfLines={1}>
+                        {cat.name}
+                      </Text>
+                    </View>
 
-        {/* View Full Analytics Button (Solid Royal Blue Background) */}
-        <TouchableOpacity
-          style={styles.actionBtnDistinctBg}
-          onPress={() => {
-            triggerHaptic.lightImpact();
-            onNavigateTab('ai');
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.actionBtnDistinctText}>View Full Analytics</Text>
-          <ChevronRight size={15} color="#0F172A" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.dividerHairline} />
-
-      {/* 4. TODAY'S SCHEDULE (Unified Section with Live Tab Filtering: Upcoming, Missed, Completed) */}
-      <View style={styles.framelessSection}>
-        <View style={styles.tasksHeaderRow}>
-          <Text style={styles.tasksHeaderTitle}>TODAY'S SCHEDULE</Text>
-          <TouchableOpacity
-            style={styles.quickAddBtn}
-            onPress={() => {
-              triggerHaptic.lightImpact();
-              onOpenAddTask();
-            }}
-          >
-            <Plus size={14} color="#0F172A" />
-            <Text style={styles.quickAddBtnText}>Add Task</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 3 Even Soft Chips in a Single Row (No Count Numbers) */}
-        <View style={styles.evenChipsRow}>
-          <TouchableOpacity
-            style={[
-              styles.evenScheduleChip,
-              dashboardScheduleTab === 'upcoming' && styles.evenScheduleChipActive,
-            ]}
-            onPress={() => {
-              triggerHaptic.lightImpact();
-              setDashboardScheduleTab('upcoming');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.evenScheduleChipText,
-                dashboardScheduleTab === 'upcoming' && styles.evenScheduleChipTextActive,
-              ]}
-            >
-              Upcoming
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.evenScheduleChip,
-              dashboardScheduleTab === 'missed' && styles.evenScheduleChipActive,
-              missedDashboardTasks.length > 0 && dashboardScheduleTab !== 'missed' && styles.evenScheduleChipMissedAlert,
-            ]}
-            onPress={() => {
-              triggerHaptic.lightImpact();
-              setDashboardScheduleTab('missed');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.evenScheduleChipText,
-                dashboardScheduleTab === 'missed' && styles.evenScheduleChipTextActive,
-                missedDashboardTasks.length > 0 && dashboardScheduleTab !== 'missed' && styles.evenScheduleChipTextMissedAlert,
-              ]}
-            >
-              Missed
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.evenScheduleChip,
-              dashboardScheduleTab === 'completed' && styles.evenScheduleChipActive,
-            ]}
-            onPress={() => {
-              triggerHaptic.lightImpact();
-              setDashboardScheduleTab('completed');
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.evenScheduleChipText,
-                dashboardScheduleTab === 'completed' && styles.evenScheduleChipTextActive,
-              ]}
-            >
-              Completed
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tasks List */}
-        <View style={styles.tasksListContainer}>
-          {displayDashboardTasks.length === 0 ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <PlannerEmptyIllustration size={90} />
-              <Text style={{ fontFamily: FONTS.displayBold, fontSize: 14, color: '#0F172A', marginTop: 8 }}>
-                {dashboardScheduleTab === 'upcoming' && 'No Upcoming Tasks'}
-                {dashboardScheduleTab === 'missed' && 'No Missed Tasks'}
-                {dashboardScheduleTab === 'completed' && 'No Completed Tasks'}
-              </Text>
-              <Text style={{ fontFamily: FONTS.groteskMedium, fontSize: 12, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>
-                Tap "+ Add Task" to schedule your day.
-              </Text>
+                    <View style={styles.catRightInfo}>
+                      <Text style={styles.compactCategoryTimeVal}>{cat.formattedTime}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
             </View>
-          ) : (
-            displayDashboardTasks.map(task => (
-              <View key={task.id} style={styles.taskItemRow}>
+          </View>
+
+          {/* 4. TODAY'S SCHEDULE (Color Filled Card with Soft Buttons & Colored Highlights) */}
+          <View style={styles.filledSectionCard}>
+            <View style={styles.tasksHeaderRow}>
+              <Text style={styles.tasksHeaderTitle}>TODAY'S SCHEDULE</Text>
+              <View style={styles.headerRightActions}>
                 <TouchableOpacity
-                  style={[styles.taskCheckbox, task.completed && styles.taskCheckboxCompleted]}
+                  style={styles.quickAddBtnSoft}
                   onPress={() => {
-                    triggerHaptic.notificationSuccess();
-                    if (onQuickCompleteTask) onQuickCompleteTask(task.id);
+                    triggerHaptic.lightImpact();
+                    onOpenAddTask();
                   }}
                 >
-                  {task.completed && <Check size={12} color="#FFFFFF" />}
+                  <Plus size={14} color="#0F172A" />
+                  <Text style={styles.quickAddBtnText}>Add Task</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerArrowBtnSoft}
+                  onPress={() => {
+                    triggerHaptic.lightImpact();
+                    onNavigateTab('planner');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <ArrowRight size={16} color="#0F172A" />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-                <View style={styles.taskTextContent}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[styles.taskTitle, task.completed && styles.taskTitleCompleted]}>
-                      {task.title}
-                    </Text>
-                    {dashboardScheduleTab === 'missed' && (
-                      <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                        <Text style={{ fontFamily: FONTS.groteskBold, fontSize: 9, color: '#DC2626' }}>MISSED</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.taskMetaText}>
-                    {task.startTime || '09:00 AM'} • {task.durationMins || 60} mins ({task.category})
+            {/* 3 Even Soft Chips with Distinct Active Color Highlights */}
+            <View style={styles.evenChipsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.evenScheduleChip,
+                  dashboardScheduleTab === 'upcoming' && styles.evenScheduleChipUpcomingActive,
+                ]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setDashboardScheduleTab('upcoming');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.evenScheduleChipText,
+                    dashboardScheduleTab === 'upcoming' && styles.evenScheduleChipUpcomingTextActive,
+                  ]}
+                >
+                  Upcoming
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.evenScheduleChip,
+                  dashboardScheduleTab === 'missed' && styles.evenScheduleChipMissedActive,
+                ]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setDashboardScheduleTab('missed');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.evenScheduleChipText,
+                    dashboardScheduleTab === 'missed' && styles.evenScheduleChipMissedTextActive,
+                  ]}
+                >
+                  Missed
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.evenScheduleChip,
+                  dashboardScheduleTab === 'completed' && styles.evenScheduleChipCompletedActive,
+                ]}
+                onPress={() => {
+                  triggerHaptic.lightImpact();
+                  setDashboardScheduleTab('completed');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.evenScheduleChipText,
+                    dashboardScheduleTab === 'completed' && styles.evenScheduleChipCompletedTextActive,
+                  ]}
+                >
+                  Completed
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tasks List */}
+            <View style={styles.tasksListContainer}>
+              {displayDashboardTasks.length === 0 ? (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <PlannerEmptyIllustration size={90} />
+                  <Text style={{ fontFamily: FONTS.displayBold, fontSize: 14, color: '#0F172A', marginTop: 8 }}>
+                    {dashboardScheduleTab === 'upcoming' && 'No Upcoming Tasks'}
+                    {dashboardScheduleTab === 'missed' && 'No Missed Tasks'}
+                    {dashboardScheduleTab === 'completed' && 'No Completed Tasks'}
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.groteskMedium, fontSize: 12, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>
+                    Tap "+ Add Task" to schedule your day.
                   </Text>
                 </View>
-              </View>
-            ))
-          )}
-        </View>
+              ) : (
+                displayDashboardTasks.map(task => (
+                  <View key={task.id} style={styles.taskItemRow}>
+                    <TouchableOpacity
+                      style={[styles.taskCheckbox, task.completed && styles.taskCheckboxCompleted]}
+                      onPress={() => {
+                        triggerHaptic.notificationSuccess();
+                        if (onQuickCompleteTask) onQuickCompleteTask(task.id);
+                      }}
+                    >
+                      {task.completed && <Check size={12} color="#FFFFFF" />}
+                    </TouchableOpacity>
 
-        {/* View Full Day Planner Button */}
-        <TouchableOpacity
-          style={styles.actionBtnDistinctBg}
-          onPress={() => {
-            triggerHaptic.lightImpact();
-            onNavigateTab('planner');
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.actionBtnDistinctText}>View Full Day Planner</Text>
-          <ChevronRight size={15} color="#0F172A" />
-        </TouchableOpacity>
-      </View>
+                    <View style={styles.taskTextContent}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.taskTitle, task.completed && styles.taskTitleCompleted]}>
+                          {task.title}
+                        </Text>
+                        {dashboardScheduleTab === 'missed' && (
+                          <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                            <Text style={{ fontFamily: FONTS.groteskBold, fontSize: 9, color: '#DC2626' }}>MISSED</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.taskMetaText}>
+                        {task.startTime || '09:00 AM'} • {task.durationMins || 60} mins ({task.category})
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
 
-      {/* Quick Utility Dock */}
-      <View style={styles.quickDockBar}>
-        <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenPomodoro}>
-          <Clock size={15} color="#0F172A" />
-          <Text style={styles.dockItemText}>Pomodoro</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenAddTask}>
-          <Plus size={15} color="#2563EB" />
-          <Text style={styles.dockItemText}>Add Task</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.dockItemBtn} onPress={onOpenSearch}>
-          <Search size={15} color="#0F172A" />
-          <Text style={styles.dockItemText}>Search</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.dockItemBtn}
-          onPress={() => {
-            triggerHaptic.lightImpact();
-            if (onOpenAchievements) onOpenAchievements();
-          }}
-        >
-          <ListTodo size={15} color="#F59E0B" />
-          <Text style={styles.dockItemText}>Badges</Text>
-        </TouchableOpacity>
-      </View>
         </>
       )}
     </ScrollView>
@@ -763,7 +742,8 @@ export const MasterDashboard: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   scrollContent: {
-    padding: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
   },
 
@@ -1021,45 +1001,88 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
 
+  // Filled Section Card (No borders, soft color fill)
+  filledSectionCard: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 18,
+    padding: 14,
+    marginVertical: 6,
+    borderWidth: 0,
+  },
+  centeredSectionHeaderRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    minHeight: 32,
+  },
+  sectionHeaderTitleCentered: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 14,
+    color: '#0F172A',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  headerArrowBtnSoftPos: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  sectionHeaderTitle: {
+    fontFamily: FONTS.displayBold,
+    fontSize: 14,
+    color: '#0F172A',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerArrowBtnSoft: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+  },
+  quickAddBtnSoft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 0,
+  },
+
   dividerHairline: {
     height: 1,
     backgroundColor: '#F1F5F9',
-    marginVertical: 22,
+    marginVertical: 14,
   },
 
   // 3. Analytics Section
   framelessSection: {
     marginVertical: 4,
-  },
-  chipsContainerCentered: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
-    padding: 3,
-    gap: 4,
-    marginTop: 10,
-  },
-  chipButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 16,
-  },
-  chipActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  chipText: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  chipTextActive: {
-    fontFamily: FONTS.groteskBold,
-    color: '#0F172A',
   },
   analyticsSideBySideRow: {
     flexDirection: 'row',
@@ -1238,7 +1261,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   tasksHeaderTitle: {
     fontFamily: FONTS.displayBold,
@@ -1247,18 +1270,10 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     textTransform: 'uppercase',
   },
-  quickAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
   quickAddBtnText: {
     fontFamily: FONTS.groteskBold,
     color: '#0F172A',
-    fontSize: 12,
+    fontSize: 11.5,
     marginLeft: 4,
   },
   tasksListContainer: {
@@ -1269,7 +1284,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    borderBottomColor: '#E2E8F0',
   },
   taskCheckbox: {
     width: 20,
@@ -1309,29 +1324,55 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
 
-  // Quick Utility Dock
-  quickDockBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 22,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  // World-Class Quick Tiles Deck
+  quickTilesDeckContainer: {
+    marginTop: 16,
+    marginBottom: 4,
   },
-  dockItemBtn: {
+  quickTilesHeaderTitle: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: '#94A3B8',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  quickTilesGridRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  quickTileCard: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
-  dockItemText: {
-    fontFamily: FONTS.groteskSemibold,
-    fontSize: 12,
+  tileIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  tileTextContent: {
+    flex: 1,
+  },
+  tileTitleText: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 13,
     color: '#0F172A',
-    marginLeft: 6,
+  },
+  tileSubText: {
+    fontFamily: FONTS.groteskMedium,
+    fontSize: 10,
+    marginTop: 1,
   },
 
-  // 3 Even Soft Schedule Chips Styles
+  // 3 Even Soft Schedule Chips Styles with Thematic Color Highlights
   evenChipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1340,28 +1381,34 @@ const styles = StyleSheet.create({
   },
   evenScheduleChip: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 8,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 18,
+    backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  evenScheduleChipActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  evenScheduleChipMissedAlert: {
-    backgroundColor: '#FEF2F2',
   },
   evenScheduleChipText: {
     fontFamily: FONTS.groteskBold,
     fontSize: 12,
     color: '#64748B',
   },
-  evenScheduleChipTextActive: {
-    color: '#0F172A',
+  evenScheduleChipUpcomingActive: {
+    backgroundColor: '#DBEAFE',
   },
-  evenScheduleChipTextMissedAlert: {
+  evenScheduleChipUpcomingTextActive: {
+    color: '#1E40AF',
+  },
+  evenScheduleChipMissedActive: {
+    backgroundColor: '#FEE2E2',
+  },
+  evenScheduleChipMissedTextActive: {
     color: '#DC2626',
+  },
+  evenScheduleChipCompletedActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  evenScheduleChipCompletedTextActive: {
+    color: '#15803D',
   },
 });

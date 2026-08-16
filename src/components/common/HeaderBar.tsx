@@ -1,24 +1,22 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { UserProfile, UserGamification } from '../../types';
+import { UserProfile } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { Clock, Sparkles, Palette, Search } from 'lucide-react-native';
 
 interface Props {
   profile: UserProfile;
-  gamification: UserGamification;
   onOpenJournal: () => void;
   theme: ThemeConfig;
   onCycleTheme: () => void;
   onOpenPomodoro: () => void;
   onOpenSearch: () => void;
-  onOpenAchievements: () => void;
+  onOpenAchievements?: () => void;
 }
 
 export const HeaderBar: React.FC<Props> = ({
   profile,
-  gamification,
   onOpenJournal,
   theme,
   onCycleTheme,
@@ -26,6 +24,7 @@ export const HeaderBar: React.FC<Props> = ({
   onOpenSearch,
   onOpenAchievements,
 }) => {
+
   // Extract last name or default to Rao / user's name
   const displayName = profile.name.split(' ').length > 1 ? profile.name.split(' ').slice(-1)[0] : profile.name;
 
@@ -40,7 +39,7 @@ export const HeaderBar: React.FC<Props> = ({
           <View style={styles.userText}>
             <Text style={styles.greetingTitle}>Hello, {displayName} 👋</Text>
             <Text style={styles.userLevelSub}>
-              Level {gamification.level} • {profile.role}
+              {profile.role}
             </Text>
           </View>
         </TouchableOpacity>

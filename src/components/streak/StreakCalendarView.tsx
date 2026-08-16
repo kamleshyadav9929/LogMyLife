@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Task, UserGamification, UserCategory } from '../../types';
+import { Task, UserCategory } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
@@ -10,7 +10,6 @@ import { ChevronLeft, ChevronRight, ArrowLeft, Flame, Trophy, CheckCircle2 } fro
 interface Props {
   theme: ThemeConfig;
   tasks: Task[];
-  gamification: UserGamification;
   categories?: UserCategory[];
   onBackToDashboard: () => void;
   onNavigateTab?: (tab: 'planner' | 'settings' | 'ai') => void;
@@ -26,11 +25,11 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export const StreakCalendarView: React.FC<Props> = ({
   theme,
   tasks,
-  gamification,
   categories = [],
   onBackToDashboard,
   onNavigateTab,
 }) => {
+
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayDetails, setSelectedDayDetails] = useState<{ dateStr: string; tasksCount: number } | null>(null);
 

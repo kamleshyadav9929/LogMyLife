@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { UserGamification } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { BottomSheet } from './BottomSheet';
 import { PomodoroView } from '../pomodoro/PomodoroView';
@@ -10,7 +9,6 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   theme: ThemeConfig;
-  gamification: UserGamification;
   onSessionComplete: (mins: number) => void;
 }
 
@@ -18,7 +16,6 @@ export const PomodoroModal: React.FC<Props> = ({
   visible,
   onClose,
   theme,
-  gamification,
   onSessionComplete,
 }) => {
   return (
@@ -39,7 +36,6 @@ export const PomodoroModal: React.FC<Props> = ({
           >
             <PomodoroView
               theme={theme}
-              gamification={gamification}
               onSessionComplete={onSessionComplete}
             />
           </ScrollView>
@@ -48,6 +44,7 @@ export const PomodoroModal: React.FC<Props> = ({
     </BottomSheet>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {

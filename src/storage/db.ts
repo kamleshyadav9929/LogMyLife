@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, PomodoroSession, TaskCategory, UserCategory, ActivityLog } from '../types';
-import { SEED_USER_PROFILE, SEED_TASKS, SEED_TIMETABLE, SEED_SYLLABUS, SEED_AI_SYNC, DEFAULT_CATEGORIES } from '../seed/defaultData';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, PomodoroSession, TaskCategory, UserCategory, ActivityLog, AppUsageLog, AppPreset, Habit } from '../types';
+import { SEED_USER_PROFILE, SEED_TASKS, SEED_TIMETABLE, SEED_SYLLABUS, SEED_AI_SYNC, DEFAULT_CATEGORIES, SEED_APP_USAGE_LOGS, DEFAULT_HABITS } from '../seed/defaultData';
+import { getLocalDateStr, getLocalDateFromISO, formatLocalTime } from '../utils/dateUtils';
 
 const KEYS = {
   USER_PROFILE: '@logmylife_user_profile',
@@ -9,20 +10,12 @@ const KEYS = {
   SYLLABUS: '@logmylife_syllabus',
   AI_SYNC: '@logmylife_ai_sync',
   GEMINI_KEY: '@logmylife_gemini_api_key',
-  GAMIFICATION: '@logmylife_gamification',
   POMODORO_SESSIONS: '@logmylife_pomodoro_sessions',
   CATEGORIES: '@logmylife_categories',
   ACTIVITY_LOGS: '@logmylife_activity_logs',
   ATTENDANCE_RECORDS: '@logmylife_attendance_records',
-};
-
-const DEFAULT_GAMIFICATION: UserGamification = {
-  xp: 0,
-  level: 1,
-  streakDays: 0,
-  totalFocusMins: 0,
-  completedPomodoros: 0,
-  unlockedBadgeIds: [],
+  APP_USAGE_LOGS: '@logmylife_app_usage_logs',
+  HABITS: '@logmylife_habits',
 };
 
 // Legacy category migration map — converts old hardcoded categories to general UserCategory entries
@@ -44,11 +37,12 @@ let memoryStore: {
   syllabus: SubjectProgress[];
   aiSync: AISyncResult[];
   geminiApiKey: string;
-  gamification: UserGamification;
   pomodoroSessions: PomodoroSession[];
   categories: UserCategory[];
   activityLogs: ActivityLog[];
   attendanceRecords: any[];
+  appUsageLogs: AppUsageLog[];
+  habits: Habit[];
 } = {
   profile: SEED_USER_PROFILE,
   tasks: [],
@@ -56,12 +50,15 @@ let memoryStore: {
   syllabus: [],
   aiSync: [],
   geminiApiKey: '',
-  gamification: DEFAULT_GAMIFICATION,
   pomodoroSessions: [],
   categories: [],
   activityLogs: [],
   attendanceRecords: [],
+  appUsageLogs: SEED_APP_USAGE_LOGS,
+  habits: DEFAULT_HABITS,
 };
+
+
 
 // Safe Storage Adapter with Web localStorage / in-memory fallback
 const storageAdapter = {
@@ -179,18 +176,18 @@ export const Database = {
         await storageAdapter.setItem(KEYS.TIMETABLE, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.SYLLABUS, JSON.stringify([]));
         await storageAdapter.setItem(KEYS.AI_SYNC, JSON.stringify([]));
-        await storageAdapter.setItem(KEYS.GAMIFICATION, JSON.stringify(DEFAULT_GAMIFICATION));
         await storageAdapter.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
         await storageAdapter.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify([]));
+        await storageAdapter.setItem(KEYS.HABITS, JSON.stringify(DEFAULT_HABITS));
 
         memoryStore.profile = SEED_USER_PROFILE;
         memoryStore.tasks = [];
         memoryStore.timetable = [];
         memoryStore.syllabus = [];
         memoryStore.aiSync = [];
-        memoryStore.gamification = DEFAULT_GAMIFICATION;
         memoryStore.categories = DEFAULT_CATEGORIES;
         memoryStore.activityLogs = [];
+        memoryStore.habits = DEFAULT_HABITS;
       } else {
         memoryStore.profile = JSON.parse(profileJson);
         const tasks = await storageAdapter.getItem(KEYS.TASKS);
@@ -207,9 +204,6 @@ export const Database = {
 
         const key = await storageAdapter.getItem(KEYS.GEMINI_KEY);
         if (key) memoryStore.geminiApiKey = key;
-
-        const g = await storageAdapter.getItem(KEYS.GAMIFICATION);
-        if (g) memoryStore.gamification = JSON.parse(g);
 
         const p = await storageAdapter.getItem(KEYS.POMODORO_SESSIONS);
         if (p) memoryStore.pomodoroSessions = JSON.parse(p);
@@ -253,6 +247,24 @@ export const Database = {
         // Load activity logs
         const logsJson = await storageAdapter.getItem(KEYS.ACTIVITY_LOGS);
         if (logsJson) memoryStore.activityLogs = JSON.parse(logsJson);
+
+        // Load app usage logs
+        const appLogsJson = await storageAdapter.getItem(KEYS.APP_USAGE_LOGS);
+        if (appLogsJson) {
+          memoryStore.appUsageLogs = JSON.parse(appLogsJson);
+        } else {
+          memoryStore.appUsageLogs = SEED_APP_USAGE_LOGS;
+          await storageAdapter.setItem(KEYS.APP_USAGE_LOGS, JSON.stringify(SEED_APP_USAGE_LOGS));
+        }
+
+        // Load habits
+        const habitsJson = await storageAdapter.getItem(KEYS.HABITS);
+        if (habitsJson) {
+          memoryStore.habits = JSON.parse(habitsJson);
+        } else {
+          memoryStore.habits = DEFAULT_HABITS;
+          await storageAdapter.setItem(KEYS.HABITS, JSON.stringify(DEFAULT_HABITS));
+        }
       }
     } catch {
       // Memory store fallback active
@@ -338,8 +350,11 @@ export const Database = {
 
   async saveActivityLog(log: Omit<ActivityLog, 'id'>): Promise<ActivityLog[]> {
     const logs = await this.getActivityLogs();
+    // Clamp durationMins between 1 and 1440 (max mins in a day)
+    const validDuration = Math.max(1, Math.min(1440, log.durationMins || 15));
     const newLog: ActivityLog = {
       ...log,
+      durationMins: validDuration,
       id: 'log-' + Date.now(),
     };
     const updated = [newLog, ...logs];
@@ -347,7 +362,6 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updated));
     } catch {}
-    await this.addXP(15);
     return updated;
   },
 
@@ -401,11 +415,9 @@ export const Database = {
 
   async toggleTaskComplete(taskId: string, verified: boolean = false): Promise<Task[]> {
     const tasks = await this.getTasks();
-    let gainedXP = false;
     const updated = tasks.map(t => {
       if (t.id === taskId) {
         if (!t.completed) {
-          gainedXP = true;
           return {
             ...t,
             completed: true,
@@ -418,26 +430,19 @@ export const Database = {
       return t;
     });
     await this.saveTasks(updated);
-
-    if (gainedXP) {
-      const xpAmount = verified ? 50 : 30;
-      await this.addXP(xpAmount);
-    }
     return updated;
   },
 
   async completeAllTodayTasks(): Promise<Task[]> {
     const tasks = await this.getTasks();
-    let newlyCompletedCount = 0;
+    const todayStr = getLocalDateStr();
     const updated = tasks.map(t => {
-      if (!t.completed) newlyCompletedCount++;
-      return { ...t, completed: true, completedAt: new Date().toISOString(), verifiedCompletion: false };
+      if (t.dateStr === todayStr && !t.completed) {
+        return { ...t, completed: true, completedAt: new Date().toISOString(), verifiedCompletion: false };
+      }
+      return t;
     });
     await this.saveTasks(updated);
-
-    if (newlyCompletedCount > 0) {
-      await this.addXP(newlyCompletedCount * 30);
-    }
     return updated;
   },
 
@@ -450,7 +455,7 @@ export const Database = {
       requiresTimer: task.requiresTimer ?? false,
       notificationEnabled: task.notificationEnabled ?? true,
       timerDurationMins: timerMins,
-      leftoverSeconds: task.leftoverSeconds ?? timerMins * 60,
+      leftoverSeconds: Math.max(0, task.leftoverSeconds ?? timerMins * 60),
       elapsedSeconds: task.elapsedSeconds ?? 0,
       earlyStopReasons: task.earlyStopReasons || [],
     };
@@ -480,7 +485,7 @@ export const Database = {
         return {
           ...t,
           elapsedSeconds: (t.elapsedSeconds || 0) + elapsedSeconds,
-          leftoverSeconds: isCompleted ? 0 : leftoverSeconds,
+          leftoverSeconds: isCompleted ? 0 : Math.max(0, leftoverSeconds),
           completed: isCompleted ? true : t.completed,
           completedAt: isCompleted ? new Date().toISOString() : t.completedAt,
           verifiedCompletion: isCompleted ? true : t.verifiedCompletion,
@@ -491,9 +496,6 @@ export const Database = {
     });
 
     await this.saveTasks(updated);
-    if (isCompleted) {
-      await this.addXP(100);
-    }
     return updated;
   },
 
@@ -506,7 +508,7 @@ export const Database = {
       durationMins,
       completed: false,
       snoozed: false,
-      dateStr: new Date().toISOString().split('T')[0],
+      dateStr: getLocalDateStr(),
       notes: 'Added via 1-Click Quick Preset',
     });
   },
@@ -550,13 +552,13 @@ export const Database = {
     const updatedTt = [...timetable, newSlot];
     await this.saveTimetable(updatedTt);
 
-    // Calculate date for the day of week (1 = Mon, 7 = Sun)
+    // Calculate target date for the day of week (0 = Sun, 1 = Mon, ..., 6 = Sat)
     const now = new Date();
-    const currentDay = now.getDay() === 0 ? 7 : now.getDay();
+    const currentDay = now.getDay(); // 0-6 matching slotData.dayOfWeek
     const diff = slotData.dayOfWeek - currentDay;
     const targetDate = new Date(now);
     targetDate.setDate(targetDate.getDate() + diff);
-    const dateStr = targetDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(targetDate);
 
     // Automatically create a corresponding Task for the Planner time slot!
     const updatedTasks = await this.addTask({
@@ -601,13 +603,11 @@ export const Database = {
 
   async toggleTopicComplete(subjectId: string, topicIndex: number): Promise<SubjectProgress[]> {
     const syllabus = await this.getSyllabus();
-    let gainedXP = false;
     const updated = syllabus.map(s => {
       if (s.id === subjectId) {
         const topics = [...s.topicsList];
         const wasCompleted = topics[topicIndex].completed;
         topics[topicIndex] = { ...topics[topicIndex], completed: !wasCompleted };
-        if (!wasCompleted) gainedXP = true;
         const completedCount = topics.filter(t => t.completed).length;
         return {
           ...s,
@@ -621,9 +621,6 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.SYLLABUS, JSON.stringify(updated));
     } catch {}
-    if (gainedXP) {
-      await this.addXP(40);
-    }
     return updated;
   },
 
@@ -664,16 +661,14 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.SYLLABUS, JSON.stringify(updated));
     } catch {}
-    await this.addXP(150);
     return updated;
   },
 
   async importAIScheduleToPlanner(suggestedSchedule: { time: string; activity: string; category: TaskCategory }[]): Promise<Task[]> {
     const tasks = await this.getTasks();
-    // Import to tomorrow's date, not today
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const tomorrowStr = getLocalDateStr(tomorrow);
 
     const newTasks: Task[] = suggestedSchedule.map((slot, idx) => ({
       id: 'ai-task-' + Date.now() + '-' + idx,
@@ -711,40 +706,9 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.AI_SYNC, JSON.stringify(updated));
     } catch {}
-    await this.addXP(100);
     return updated;
   },
 
-  // ────────── Gamification ──────────
-
-  async getGamification(): Promise<UserGamification> {
-    try {
-      const data = await storageAdapter.getItem(KEYS.GAMIFICATION);
-      return data ? JSON.parse(data) : memoryStore.gamification;
-    } catch {
-      return memoryStore.gamification;
-    }
-  },
-
-  async saveGamification(gamification: UserGamification): Promise<void> {
-    memoryStore.gamification = gamification;
-    try {
-      await storageAdapter.setItem(KEYS.GAMIFICATION, JSON.stringify(gamification));
-    } catch {}
-  },
-
-  async addXP(amount: number): Promise<UserGamification> {
-    const current = await this.getGamification();
-    const newXP = current.xp + amount;
-    const newLevel = Math.floor(newXP / 100);
-    const updated: UserGamification = {
-      ...current,
-      xp: newXP,
-      level: newLevel,
-    };
-    await this.saveGamification(updated);
-    return updated;
-  },
 
   // ────────── Pomodoro ──────────
 
@@ -756,8 +720,7 @@ export const Database = {
     isCompleted: boolean = true,
     leftoverSeconds?: number,
     taskId?: string
-  ): Promise<{ gamification: UserGamification; sessions: PomodoroSession[] }> {
-    const currentG = await this.getGamification();
+  ): Promise<{ sessions: PomodoroSession[] }> {
     const pSessions = await this.getPomodoroSessions();
 
     const newSession: PomodoroSession = {
@@ -768,7 +731,7 @@ export const Database = {
       sessionGoal,
       stopReason,
       isCompleted,
-      leftoverSeconds,
+      leftoverSeconds: Math.max(0, leftoverSeconds || 0),
       taskId,
     };
 
@@ -777,17 +740,6 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.POMODORO_SESSIONS, JSON.stringify(updatedSessions));
     } catch {}
-
-    const earnedXP = isCompleted ? 100 : Math.max(20, Math.floor((durationMins / 25) * 60));
-    const updatedG: UserGamification = {
-      ...currentG,
-      totalFocusMins: currentG.totalFocusMins + durationMins,
-      completedPomodoros: isCompleted ? currentG.completedPomodoros + 1 : currentG.completedPomodoros,
-      xp: currentG.xp + earnedXP,
-      level: Math.floor((currentG.xp + earnedXP) / 100),
-    };
-
-    await this.saveGamification(updatedG);
 
     if (taskId) {
       await this.updateTaskTimerProgress(
@@ -799,7 +751,7 @@ export const Database = {
       );
     }
 
-    return { gamification: updatedG, sessions: updatedSessions };
+    return { sessions: updatedSessions };
   },
 
   async getPomodoroSessions(): Promise<PomodoroSession[]> {
@@ -876,5 +828,157 @@ export const Database = {
     try {
       await storageAdapter.setItem(KEYS.ATTENDANCE_RECORDS, JSON.stringify([]));
     } catch {}
-  }
+  },
+
+  // ────────── App Usage Logs ──────────
+
+  async getAppUsageLogs(): Promise<AppUsageLog[]> {
+    try {
+      const data = await storageAdapter.getItem(KEYS.APP_USAGE_LOGS);
+      if (data) return JSON.parse(data);
+      return memoryStore.appUsageLogs || [];
+    } catch {
+      return memoryStore.appUsageLogs || [];
+    }
+  },
+
+  async saveAppUsageLog(logData: Omit<AppUsageLog, 'id'>): Promise<AppUsageLog[]> {
+    const logs = await this.getAppUsageLogs();
+    const newLog: AppUsageLog = {
+      ...logData,
+      id: 'app-log-' + Date.now(),
+    };
+    const updated = [newLog, ...logs];
+    memoryStore.appUsageLogs = updated;
+    try {
+      await storageAdapter.setItem(KEYS.APP_USAGE_LOGS, JSON.stringify(updated));
+    } catch {}
+    return updated;
+  },
+
+  async addAppUsageFromPreset(
+    preset: AppPreset,
+    startTime: string,
+    endTime: string,
+    durationMins: number
+  ): Promise<AppUsageLog[]> {
+    const todayStr = getLocalDateStr();
+    return this.saveAppUsageLog({
+      appName: preset.name,
+      packageName: preset.packageName,
+      iconName: preset.iconName,
+      iconColor: preset.iconColor,
+      bgTint: preset.bgTint,
+      startTime,
+      endTime,
+      durationMins,
+      dateStr: todayStr,
+      categoryTag: preset.categoryTag,
+      isAutoTracked: false,
+    });
+  },
+
+  async deleteAppUsageLog(logId: string): Promise<AppUsageLog[]> {
+    const logs = await this.getAppUsageLogs();
+    const updated = logs.filter(l => l.id !== logId);
+    memoryStore.appUsageLogs = updated;
+    try {
+      await storageAdapter.setItem(KEYS.APP_USAGE_LOGS, JSON.stringify(updated));
+    } catch {}
+    return updated;
+  },
+
+  // ────────── Habits ──────────
+
+  async getHabits(): Promise<Habit[]> {
+    try {
+      const data = await storageAdapter.getItem(KEYS.HABITS);
+      if (data) return JSON.parse(data);
+      return memoryStore.habits || DEFAULT_HABITS;
+    } catch {
+      return memoryStore.habits || DEFAULT_HABITS;
+    }
+  },
+
+  async saveHabits(habits: Habit[]): Promise<void> {
+    memoryStore.habits = habits;
+    try {
+      await storageAdapter.setItem(KEYS.HABITS, JSON.stringify(habits));
+    } catch {}
+  },
+
+  async addHabit(habitData: Omit<Habit, 'id' | 'createdAt' | 'streak' | 'bestStreak'>): Promise<Habit[]> {
+    const habits = await this.getHabits();
+    const newHabit: Habit = {
+      ...habitData,
+      id: 'h-' + Date.now(),
+      createdAt: new Date().toISOString(),
+      streak: 0,
+      bestStreak: 0,
+    };
+    const updated = [newHabit, ...habits];
+    await this.saveHabits(updated);
+    return updated;
+  },
+
+  async toggleHabitDate(habitId: string, dateStr: string): Promise<Habit[]> {
+    const today = getLocalDateStr();
+    if (dateStr !== today) {
+      // Past and future dates are locked to prevent streak tampering
+      return this.getHabits();
+    }
+    const habits = await this.getHabits();
+    const updated = habits.map(h => {
+      if (h.id === habitId) {
+        const wasCompleted = h.completedDates.includes(dateStr);
+        const newDates = wasCompleted
+          ? h.completedDates.filter(d => d !== dateStr)
+          : [...h.completedDates, dateStr];
+        
+        const streak = computeHabitStreak(newDates);
+        const bestStreak = Math.max(h.bestStreak || 0, streak);
+        return {
+          ...h,
+          completedDates: newDates,
+          streak,
+          bestStreak,
+        };
+      }
+      return h;
+    });
+
+    await this.saveHabits(updated);
+    return updated;
+  },
+
+  async deleteHabit(habitId: string): Promise<Habit[]> {
+    const habits = await this.getHabits();
+    const updated = habits.filter(h => h.id !== habitId);
+    await this.saveHabits(updated);
+    return updated;
+  },
 };
+
+function computeHabitStreak(dates: string[]): number {
+  if (!dates || !dates.length) return 0;
+  const sorted = Array.from(new Set(dates)).sort().reverse();
+  const dNow = new Date();
+  const t = getLocalDateStr(dNow);
+  const dYesterday = new Date(dNow);
+  dYesterday.setDate(dYesterday.getDate() - 1);
+  const y = getLocalDateStr(dYesterday);
+  let current: string | null = (sorted[0] === t || sorted[0] === y) ? sorted[0] : null;
+  if (!current) return 0;
+  let streak = 0;
+  for (const d of sorted) {
+    if (current && d === current) {
+      streak++;
+      const [yr, mo, da] = current.split('-').map(Number);
+      const prevDate = new Date(yr, mo - 1, da - 1);
+      current = getLocalDateStr(prevDate);
+    } else break;
+  }
+  return streak;
+}
+
+

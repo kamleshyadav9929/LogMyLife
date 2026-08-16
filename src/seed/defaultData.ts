@@ -1,4 +1,4 @@
-import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserCategory } from '../types';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserCategory, Habit } from '../types';
 
 export const SEED_USER_PROFILE: UserProfile = {
   name: 'User Profile',
@@ -75,3 +75,69 @@ export const CATEGORY_COLOR_OPTIONS = [
   '#6366F1', // Indigo
   '#84CC16', // Lime
 ];
+
+const todayStr = new Date().toISOString().split('T')[0];
+
+export const SEED_APP_USAGE_LOGS: any[] = [];
+
+export const DEFAULT_HABITS: Habit[] = [
+  {
+    id: 'h1',
+    name: 'Morning Mindfulness & Meditation',
+    color: '#F59E0B',
+    frequencyType: 'daily',
+    targetDays: [0, 1, 2, 3, 4, 5, 6],
+    completedDates: [todayStr],
+    createdAt: new Date().toISOString(),
+    categoryId: 'cat-health',
+    reminderTime: '07:30 AM',
+    goalDescription: '10 mins session',
+    streak: 1,
+    bestStreak: 7,
+  },
+  {
+    id: 'h2',
+    name: 'Deep Reading & Skill Study',
+    color: '#7C3AED',
+    frequencyType: 'weekly_target',
+    weeklyTargetCount: 5,
+    targetDays: [],
+    completedDates: [todayStr],
+    createdAt: new Date().toISOString(),
+    categoryId: 'cat-learning',
+    reminderTime: '09:00 PM',
+    goalDescription: '20 pages per day',
+    streak: 1,
+    bestStreak: 14,
+  },
+  {
+    id: 'h3',
+    name: 'Gym & Physical Workout',
+    color: '#10B981',
+    frequencyType: 'specific_days',
+    targetDays: [1, 3, 5],
+    completedDates: [todayStr],
+    createdAt: new Date().toISOString(),
+    categoryId: 'cat-health',
+    reminderTime: '06:00 PM',
+    goalDescription: '45 mins workout',
+    streak: 1,
+    bestStreak: 5,
+  },
+  {
+    id: 'h4',
+    name: 'Hydration Target (2.5 Liters)',
+    color: '#0EA5E9',
+    frequencyType: 'daily',
+    targetDays: [0, 1, 2, 3, 4, 5, 6],
+    completedDates: [todayStr],
+    createdAt: new Date().toISOString(),
+    categoryId: 'cat-personal',
+    reminderTime: '12:00 PM',
+    goalDescription: '8 glasses of water',
+    streak: 1,
+    bestStreak: 21,
+  },
+];
+
+

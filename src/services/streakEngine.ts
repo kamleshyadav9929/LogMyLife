@@ -1,4 +1,5 @@
 import { Task, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
+import { getLocalDateStr, getLocalDateFromISO } from '../utils/dateUtils';
 
 export interface DailyActivityScore {
   score: number;
@@ -17,10 +18,10 @@ export function calculateDailyActivityScore(
   dateStr: string,
   currentStreak: number = 0
 ): DailyActivityScore {
-  // Filter for target date
+  // Filter for target date using local date mapping
   const dayTasks = tasks.filter(t => t.dateStr === dateStr);
   const dayLogs = activityLogs.filter(l => l.dateStr === dateStr);
-  const dayPomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(dateStr) && s.isCompleted);
+  const dayPomodoros = pomodoroSessions.filter(s => getLocalDateFromISO(s.completedAt) === dateStr && s.isCompleted);
 
   // 1. Task Points (5 pts per completed task, weighted by category tag)
   let taskPoints = 0;
@@ -29,7 +30,7 @@ export function calculateDailyActivityScore(
   dayTasks.forEach(t => {
     if (t.completed) {
       const cat = categories.find(c => c.id === t.category);
-      const tag = cat?.tag || 'productive';
+      const tag = cat?.tag || 'routine';
       const weight = CATEGORY_TAG_WEIGHTS[tag] || 1.0;
       taskPoints += Math.round(5 * weight);
 
@@ -77,7 +78,7 @@ export function calculateMultiFactorStreak(
   threshold: number = 30
 ): { currentStreak: number; longestStreak: number; todayScore: number } {
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getLocalDateStr(now);
 
   const todayScoreObj = calculateDailyActivityScore(
     tasks,
@@ -97,7 +98,7 @@ export function calculateMultiFactorStreak(
   for (let i = 0; i < 365; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = getLocalDateStr(d);
 
     const dayScoreObj = calculateDailyActivityScore(
       tasks,
@@ -119,7 +120,7 @@ export function calculateMultiFactorStreak(
   for (let i = 365; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = getLocalDateStr(d);
 
     const dayScoreObj = calculateDailyActivityScore(
       tasks,
@@ -144,3 +145,4 @@ export function calculateMultiFactorStreak(
     todayScore,
   };
 }
+

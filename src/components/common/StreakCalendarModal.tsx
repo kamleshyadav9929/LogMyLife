@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
-import { Task, UserGamification } from '../../types';
+import { Task } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { triggerHaptic } from '../../services/haptics';
 import { BottomSheet } from './BottomSheet';
-import { ChevronLeft, ChevronRight, X, Flame, Calendar as CalendarIcon, CheckCircle2, Award } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, X, Flame, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react-native';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   theme: ThemeConfig;
   tasks: Task[];
-  gamification: UserGamification;
 }
 
 const MONTH_NAMES = [
@@ -27,7 +26,6 @@ export const StreakCalendarModal: React.FC<Props> = ({
   onClose,
   theme,
   tasks,
-  gamification,
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDayDetails, setSelectedDayDetails] = useState<{ dateStr: string; tasksCount: number } | null>(null);
@@ -148,13 +146,8 @@ export const StreakCalendarModal: React.FC<Props> = ({
               <Text style={styles.statCardVal}>{activeMonthDaysCount} / {daysInMonth}</Text>
               <Text style={styles.statCardLabel}>Active in {MONTH_NAMES[month].slice(0, 3)}</Text>
             </View>
-
-            <View style={styles.statCardItem}>
-              <Award size={18} color="#10B981" />
-              <Text style={styles.statCardVal}>Lvl {gamification.level}</Text>
-              <Text style={styles.statCardLabel}>{gamification.xp} XP Earned</Text>
-            </View>
           </View>
+
 
           {/* Google Material Style Month Navigation Bar */}
           <View style={styles.monthNavigationHeader}>

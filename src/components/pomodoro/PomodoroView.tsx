@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { Task, UserGamification, PomodoroSession } from '../../types';
+import { Task, PomodoroSession } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { Database } from '../../storage/db';
@@ -38,7 +38,6 @@ import {
 
 interface Props {
   theme: ThemeConfig;
-  gamification: UserGamification;
   targetTask?: Task;
   onBackToDashboard?: () => void;
   onSessionComplete?: (mins: number) => void;
@@ -60,7 +59,6 @@ const GOAL_SUGGESTIONS = [
 
 export const PomodoroView: React.FC<Props> = ({
   theme,
-  gamification,
   targetTask,
   onBackToDashboard,
   onSessionComplete,
@@ -78,6 +76,10 @@ export const PomodoroView: React.FC<Props> = ({
   );
   const [isRunning, setIsRunning] = useState(false);
   const [recentSessions, setRecentSessions] = useState<PomodoroSession[]>([]);
+
+  // Timer wall-clock & double logging guard refs
+  const expectedEndTimeRef = useRef<number | null>(null);
+  const isLoggingRef = useRef(false);
 
   // Session intent goal state & modals
   const [sessionGoal, setSessionGoal] = useState<string>(targetTask?.title || '');
@@ -102,37 +104,56 @@ export const PomodoroView: React.FC<Props> = ({
     fetchSessions();
   }, []);
 
-  // Timer Countdown Loop
+  // Timer Countdown Loop using Wall-Clock comparison
   useEffect(() => {
     let interval: any = null;
-    if (isRunning && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (secondsLeft === 0 && isRunning) {
-      setIsRunning(false);
-      triggerHaptic.notificationSuccess();
 
-      if (mode === 'work') {
-        const elapsedMins = Math.max(1, Math.round((totalDuration - secondsLeft) / 60));
-        Database.logPomodoroSession(
-          elapsedMins,
-          targetTask?.category || 'Focus & Deep Work',
-          sessionGoal.trim() || 'Focus Session',
-          undefined,
-          true,
-          0,
-          targetTask?.id
-        ).then(({ sessions }) => {
-          setRecentSessions(sessions.slice(-8));
-          if (onSessionComplete) onSessionComplete(elapsedMins);
-        });
+    if (isRunning) {
+      if (!expectedEndTimeRef.current) {
+        expectedEndTimeRef.current = Date.now() + secondsLeft * 1000;
       }
+      isLoggingRef.current = false;
+
+      interval = setInterval(() => {
+        if (!expectedEndTimeRef.current) return;
+        const remaining = Math.max(0, Math.ceil((expectedEndTimeRef.current - Date.now()) / 1000));
+        setSecondsLeft(remaining);
+
+        if (remaining <= 0) {
+          setIsRunning(false);
+          expectedEndTimeRef.current = null;
+
+          if (!isLoggingRef.current) {
+            isLoggingRef.current = true;
+            triggerHaptic.notificationSuccess();
+
+            if (mode === 'work') {
+              const elapsedMins = Math.max(1, Math.round(totalDuration / 60));
+              Database.logPomodoroSession(
+                elapsedMins,
+                targetTask?.category || 'Focus & Deep Work',
+                sessionGoal.trim() || 'Focus Session',
+                undefined,
+                true,
+                0,
+                targetTask?.id
+              ).then(({ sessions }) => {
+                setRecentSessions(sessions.slice(-8));
+                if (onSessionComplete) onSessionComplete(elapsedMins);
+              });
+            }
+          }
+        }
+      }, 1000);
+    } else {
+      expectedEndTimeRef.current = null;
     }
+
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning, secondsLeft, mode, totalDuration, targetTask, sessionGoal]);
+  }, [isRunning, mode, totalDuration, targetTask, sessionGoal, onSessionComplete]);
+
 
   // Soft Aura Pulsing Animation during active focus
   useEffect(() => {
@@ -329,7 +350,7 @@ export const PomodoroView: React.FC<Props> = ({
   const strokeDashoffset = circumference * (1 - progressRatio);
 
   const getModeColor = () => {
-    if (mode === 'work') return { primary: '#2563EB', lightBg: '#EFF6FF', stroke: '#2563EB' };
+    if (mode === 'work') return { primary: '#EF4444', lightBg: '#FEF2F2', stroke: '#EF4444' };
     if (mode === 'short_break') return { primary: '#10B981', lightBg: '#ECFDF5', stroke: '#10B981' };
     return { primary: '#7C3AED', lightBg: '#FAF5FF', stroke: '#7C3AED' };
   };
@@ -749,7 +770,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   chipPillActiveWork: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#FEF2F2',
   },
   chipPillActiveBreak: {
     backgroundColor: '#ECFDF5',
@@ -1011,7 +1032,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 12,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#EF4444',
   },
   modalConfirmText: {
     fontFamily: FONTS.groteskBold,

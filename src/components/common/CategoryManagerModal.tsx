@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { UserCategory, CategoryTag, CATEGORY_TAG_INFO } from '../../types';
 import { ThemeConfig } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
@@ -7,8 +7,6 @@ import { triggerHaptic } from '../../services/haptics';
 import { X, Plus, Trash2, Edit2, Check } from 'lucide-react-native';
 import { BottomSheet } from './BottomSheet';
 import { CATEGORY_COLOR_OPTIONS } from '../../seed/defaultData';
-
-import { CategoryIcon, CATEGORY_ICON_OPTIONS, CategoryIconName } from './CategoryIcon';
 
 interface Props {
   visible: boolean;
@@ -37,7 +35,6 @@ export const CategoryManagerModal: React.FC<Props> = ({
   const [name, setName] = useState('');
   const [tag, setTag] = useState<CategoryTag>('productive');
   const [color, setColor] = useState(CATEGORY_COLOR_OPTIONS[0]);
-  const [icon, setIcon] = useState<string>('briefcase');
 
   const handleOpenAdd = () => {
     triggerHaptic.lightImpact();
@@ -45,7 +42,6 @@ export const CategoryManagerModal: React.FC<Props> = ({
     setName('');
     setTag('productive');
     setColor(CATEGORY_COLOR_OPTIONS[0]);
-    setIcon('briefcase');
     setIsCreating(true);
   };
 
@@ -55,7 +51,6 @@ export const CategoryManagerModal: React.FC<Props> = ({
     setName(cat.name);
     setTag(cat.tag);
     setColor(cat.color);
-    setIcon(cat.icon || 'briefcase');
     setIsCreating(true);
   };
 
@@ -68,14 +63,13 @@ export const CategoryManagerModal: React.FC<Props> = ({
         name: name.trim(),
         tag,
         color,
-        icon,
       });
     } else {
       onAddCategory({
         name: name.trim(),
         tag,
         color,
-        icon,
+        icon: 'folder',
       });
     }
 
@@ -91,149 +85,153 @@ export const CategoryManagerModal: React.FC<Props> = ({
   return (
     <BottomSheet visible={visible} onClose={onClose} theme={theme} snapPoints={['85%', '92%']}>
       {({ scrollEnabled, onScroll, closeSheet }) => (
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.contentPadding}
-          scrollEnabled={scrollEnabled}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-        >
+        <View style={styles.container}>
+          {/* Header matching Habit Tracker exactly */}
           <View style={styles.header}>
-            <View>
-              <Text style={styles.title}>Category Manager</Text>
-              <Text style={styles.subtitle}>Customize your personal life categories</Text>
-            </View>
-            <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
-              <X size={20} color="#64748B" />
+            <TouchableOpacity
+              style={styles.roundBackBtn}
+              onPress={closeSheet}
+              activeOpacity={0.8}
+            >
+              <X size={18} color="#0F172A" />
             </TouchableOpacity>
+
+            <View style={styles.titleRow}>
+              <Text style={styles.titleText}>Manage Categories</Text>
+            </View>
+
+            {!isCreating ? (
+              <TouchableOpacity
+                style={styles.neutralChipAddBtn}
+                onPress={handleOpenAdd}
+                activeOpacity={0.8}
+              >
+                <Plus size={15} color="#0F172A" strokeWidth={2.5} style={{ marginRight: 4 }} />
+                <Text style={styles.neutralChipAddBtnTxt}>Add</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 38 }} />
+            )}
           </View>
 
-          {!isCreating ? (
-            <>
-              {/* Category List */}
-              <View style={styles.listContainer}>
-                {categories.map((cat) => {
+          {/* Hairline Divider below Header */}
+          <View style={styles.headerHairline} />
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.contentPadding}
+            scrollEnabled={scrollEnabled}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {!isCreating ? (
+              /* Simple Icon-less Category List without outer box */
+              <View style={styles.simpleListContainer}>
+                {categories.map((cat, index) => {
                   const tagInfo = CATEGORY_TAG_INFO[cat.tag];
                   return (
-                    <View key={cat.id} style={styles.categoryCard}>
-                      <View style={[styles.iconBox, { backgroundColor: `${cat.color}15` }]}>
-                        <CategoryIcon name={cat.icon} size={20} color={cat.color} />
-                      </View>
+                    <React.Fragment key={cat.id}>
+                      <View style={styles.simpleCategoryRow}>
+                        {/* Minimalist Color Dot (No Logo Icon) */}
+                        <View style={[styles.colorDotIndicator, { backgroundColor: cat.color }]} />
 
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.catName}>{cat.name}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                          <CategoryIcon name={tagInfo?.icon || 'tag'} size={12} color="#64748B" />
-                          <Text style={styles.catMeta}>{tagInfo?.label || cat.tag}</Text>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={styles.catNameText}>{cat.name}</Text>
+                          <Text style={styles.catMetaText}>{tagInfo?.label || cat.tag}</Text>
+                        </View>
+
+                        <View style={styles.actionRow}>
+                          <TouchableOpacity
+                            style={styles.roundActionBtn}
+                            onPress={() => handleOpenEdit(cat)}
+                          >
+                            <Edit2 size={15} color="#64748B" />
+                          </TouchableOpacity>
+
+                          {categories.length > 1 && (
+                            <TouchableOpacity
+                              style={[styles.roundActionBtn, { marginLeft: 6 }]}
+                              onPress={() => handleDelete(cat.id)}
+                            >
+                              <Trash2 size={15} color="#EF4444" />
+                            </TouchableOpacity>
+                          )}
                         </View>
                       </View>
 
-                      <TouchableOpacity
-                        style={styles.actionBtn}
-                        onPress={() => handleOpenEdit(cat)}
-                      >
-                        <Edit2 size={16} color="#64748B" />
-                      </TouchableOpacity>
-
-                      {categories.length > 1 && (
-                        <TouchableOpacity
-                          style={[styles.actionBtn, { marginLeft: 4 }]}
-                          onPress={() => handleDelete(cat.id)}
-                        >
-                          <Trash2 size={16} color="#EF4444" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                      {index < categories.length - 1 && <View style={styles.rowHairline} />}
+                    </React.Fragment>
                   );
                 })}
               </View>
+            ) : (
+              /* Add / Edit Category Form */
+              <View style={styles.formContainer}>
+                <View style={styles.formHeaderRow}>
+                  <Text style={styles.formTitle}>
+                    {editingCategory ? 'Edit Category' : 'New Category'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setIsCreating(false)}>
+                    <Text style={styles.cancelText}>Back to List</Text>
+                  </TouchableOpacity>
+                </View>
 
-              <TouchableOpacity style={styles.addCategoryBtn} onPress={handleOpenAdd} activeOpacity={0.85}>
-                <Plus size={18} color="#FFFFFF" />
-                <Text style={styles.addCategoryBtnText}>Create Custom Category</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            /* Add / Edit Category Form */
-            <View style={styles.formContainer}>
-              <View style={styles.formHeaderRow}>
-                <Text style={styles.formTitle}>
-                  {editingCategory ? 'Edit Category' : 'New Category'}
-                </Text>
-                <TouchableOpacity onPress={() => setIsCreating(false)}>
-                  <Text style={styles.cancelText}>Back to List</Text>
+                <Text style={styles.label}>CATEGORY NAME</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Graphic Design, Gym, Reading"
+                  placeholderTextColor="#94A3B8"
+                  value={name}
+                  onChangeText={setName}
+                />
+
+                <Text style={styles.label}>PRODUCTIVITY TAG</Text>
+                <View style={styles.tagGrid}>
+                  {TAG_OPTIONS.map((t) => {
+                    const info = CATEGORY_TAG_INFO[t];
+                    const isSelected = tag === t;
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.tagPill, isSelected && styles.tagPillActive]}
+                        onPress={() => setTag(t)}
+                      >
+                        <Text style={[styles.tagPillText, isSelected && styles.tagPillTextActive]}>
+                          {info.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.label}>COLOR ACCENT</Text>
+                <View style={styles.colorGrid}>
+                  {CATEGORY_COLOR_OPTIONS.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[
+                        styles.colorDotChoice,
+                        { backgroundColor: c },
+                        color === c && styles.colorDotChoiceActive,
+                      ]}
+                      onPress={() => setColor(c)}
+                    >
+                      {color === c && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity style={styles.saveSubmitBtn} onPress={handleSave} activeOpacity={0.85}>
+                  <Text style={styles.saveSubmitText}>
+                    {editingCategory ? 'Save Changes' : 'Create Category'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-
-              <Text style={styles.label}>Category Name:</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Graphic Design, Gym, Reading"
-                placeholderTextColor="#94A3B8"
-                value={name}
-                onChangeText={setName}
-              />
-
-              <Text style={styles.label}>Category Vector Icon:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiRow}>
-                {CATEGORY_ICON_OPTIONS.map((item) => (
-                  <TouchableOpacity
-                    key={item.name}
-                    style={[styles.emojiChip, icon === item.name && styles.emojiChipActive]}
-                    onPress={() => setIcon(item.name)}
-                  >
-                    <CategoryIcon name={item.name} size={20} color={icon === item.name ? '#2563EB' : '#64748B'} />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <Text style={styles.label}>Category Tag (Determines Productivity Weight):</Text>
-              <View style={styles.tagGrid}>
-                {TAG_OPTIONS.map((t) => {
-                  const info = CATEGORY_TAG_INFO[t];
-                  const isSelected = tag === t;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.tagPill, isSelected && styles.tagPillActive]}
-                      onPress={() => setTag(t)}
-                    >
-                      <CategoryIcon name={info.icon} size={14} color={isSelected ? '#2563EB' : '#64748B'} />
-                      <Text style={[styles.tagPillText, isSelected && styles.tagPillTextActive]}>
-                        {info.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.label}>Color Theme:</Text>
-              <View style={styles.colorGrid}>
-                {CATEGORY_COLOR_OPTIONS.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[
-                      styles.colorDot,
-                      { backgroundColor: c },
-                      color === c && styles.colorDotActive,
-                    ]}
-                    onPress={() => setColor(c)}
-                  >
-                    {color === c && <Check size={14} color="#FFFFFF" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TouchableOpacity style={styles.saveSubmitBtn} onPress={handleSave} activeOpacity={0.85}>
-                <Check size={18} color="#FFFFFF" />
-                <Text style={styles.saveSubmitText}>
-                  {editingCategory ? 'Save Changes' : 'Create Category'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        </View>
       )}
     </BottomSheet>
   );
@@ -242,141 +240,137 @@ export const CategoryManagerModal: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  contentPadding: {
-    padding: 22,
-    paddingBottom: 40,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  title: {
-    fontFamily: FONTS.displayBold,
-    fontSize: 18,
-    color: '#0F172A',
+  headerHairline: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 20,
+    marginBottom: 12,
   },
-  subtitle: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  listContainer: {
-    gap: 10,
-    marginBottom: 20,
-  },
-  categoryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  roundBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  catIconText: {
-    fontSize: 20,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  catName: {
-    fontFamily: FONTS.groteskBold,
-    fontSize: 14,
+  titleText: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 18,
     color: '#0F172A',
   },
-  catMeta: {
+  neutralChipAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 0,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  neutralChipAddBtnTxt: {
+    fontFamily: FONTS.groteskBold,
+    fontSize: 12,
+    color: '#0F172A',
+  },
+  contentPadding: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  // Simple List Styling (No Outer Box, No Icons)
+  simpleListContainer: {
+    paddingVertical: 4,
+  },
+  simpleCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  colorDotIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  catNameText: {
+    fontFamily: FONTS.gilroyExtraBold,
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  catMetaText: {
     fontFamily: FONTS.groteskMedium,
     fontSize: 11,
     color: '#64748B',
     marginTop: 2,
   },
-  actionBtn: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  addCategoryBtn: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  roundActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    paddingVertical: 14,
-    backgroundColor: '#2563EB',
-    gap: 6,
   },
-  addCategoryBtnText: {
-    fontFamily: FONTS.groteskBold,
-    color: '#FFFFFF',
-    fontSize: 14,
+  rowHairline: {
+    height: 1,
+    backgroundColor: '#F8FAFC',
   },
+
+  // Form Styling
   formContainer: {
-    gap: 12,
+    gap: 14,
+    paddingTop: 8,
   },
   formHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   formTitle: {
-    fontFamily: FONTS.displayBold,
+    fontFamily: FONTS.gilroyExtraBold,
     fontSize: 16,
     color: '#0F172A',
   },
   cancelText: {
     fontFamily: FONTS.groteskBold,
     fontSize: 12,
-    color: '#2563EB',
+    color: '#64748B',
   },
   label: {
     fontFamily: FONTS.groteskBold,
-    fontSize: 11,
-    marginTop: 8,
-    marginBottom: 4,
-    color: '#475569',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: '#64748B',
+    marginTop: 6,
   },
   input: {
     fontFamily: FONTS.groteskMedium,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 12,
     fontSize: 14,
-    borderWidth: 1,
     backgroundColor: '#F8FAFC',
     color: '#0F172A',
-    borderColor: '#E2E8F0',
-  },
-  emojiRow: {
-    flexDirection: 'row',
-    paddingVertical: 4,
-  },
-  emojiChip: {
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    marginRight: 8,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  emojiChipActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
+    borderWidth: 0,
   },
   tagGrid: {
     flexDirection: 'row',
@@ -384,58 +378,45 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
   },
   tagPillActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-  },
-  tagPillIcon: {
-    fontSize: 14,
+    backgroundColor: '#FCE7F3',
   },
   tagPillText: {
-    fontFamily: FONTS.groteskMedium,
-    fontSize: 12,
+    fontFamily: FONTS.groteskBold,
+    fontSize: 11,
     color: '#64748B',
   },
   tagPillTextActive: {
-    fontFamily: FONTS.groteskBold,
-    color: '#2563EB',
+    color: '#BE185D',
   },
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 4,
   },
-  colorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  colorDotChoice: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  colorDotActive: {
+  colorDotChoiceActive: {
     borderWidth: 2,
     borderColor: '#0F172A',
   },
   saveSubmitBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 14,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1E293B',
     marginTop: 16,
-    gap: 6,
   },
   saveSubmitText: {
     fontFamily: FONTS.groteskBold,

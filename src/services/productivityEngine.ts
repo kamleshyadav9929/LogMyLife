@@ -1,5 +1,6 @@
 import { Task, ActivityLog, PomodoroSession, UserCategory, CATEGORY_TAG_WEIGHTS } from '../types';
 import { calculateDailyActivityScore } from './streakEngine';
+import { getLocalDateStr, getLocalDateFromISO } from '../utils/dateUtils';
 
 export interface ScoreBreakdown {
   taskExecution: number;    // max 35 pts
@@ -29,27 +30,28 @@ export function calculateDetailedProductivityScore(
   streakDays: number = 0,
   dateStr?: string
 ): ScoreBreakdown {
-  const targetDateStr = dateStr || new Date().toISOString().split('T')[0];
+  const targetDateStr = dateStr || getLocalDateStr();
 
   const dayTasks = tasks.filter(t => t.dateStr === targetDateStr);
   const dayLogs = activityLogs.filter(l => l.dateStr === targetDateStr);
-  const dayPomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(targetDateStr) && s.isCompleted);
+  const dayPomodoros = pomodoroSessions.filter(s => getLocalDateFromISO(s.completedAt) === targetDateStr && s.isCompleted);
 
-  // 1. Task Execution (max 35 pts)
+  // 1. Task Execution (max 35 pts) - Exclude snoozed tasks from denominator
   let taskExecution = 0;
-  if (dayTasks.length > 0) {
-    const completedTasks = dayTasks.filter(t => t.completed);
+  const activeTasks = dayTasks.filter(t => !t.snoozed);
+  if (activeTasks.length > 0) {
+    const completedTasks = activeTasks.filter(t => t.completed);
     let weightedCompletionRatio = 0;
 
-    dayTasks.forEach(t => {
+    activeTasks.forEach(t => {
       if (t.completed) {
         const cat = categories.find(c => c.id === t.category);
-        const weight = CATEGORY_TAG_WEIGHTS[cat?.tag || 'productive'] || 1.0;
+        const weight = CATEGORY_TAG_WEIGHTS[cat?.tag || 'routine'] || 1.0;
         weightedCompletionRatio += weight;
       }
     });
 
-    const executionRatio = Math.min(1.0, weightedCompletionRatio / dayTasks.length);
+    const executionRatio = Math.min(1.0, weightedCompletionRatio / activeTasks.length);
     taskExecution = Math.round(executionRatio * 30);
 
     // Verified completion bonus (+5 pts)
@@ -59,6 +61,7 @@ export function calculateDetailedProductivityScore(
     }
   }
   taskExecution = Math.min(35, taskExecution);
+
 
   // 2. Focused Time (max 25 pts)
   // Target: 120 mins focus time per day

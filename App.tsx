@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, SafeAreaView, StatusBar, TouchableOpacity, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
-import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserGamification, UserCategory } from './src/types';
+import * as SplashScreenNative from 'expo-splash-screen';
+import { UserProfile, Task, TimetableSlot, SubjectProgress, AISyncResult, UserCategory } from './src/types';
 import { Database } from './src/storage/db';
 import { THEMES, ThemeKey, ThemeConfig } from './src/theme/colors';
 import { FONTS } from './src/theme/typography';
@@ -11,19 +12,23 @@ import { AnalyticsDashboard } from './src/components/analytics/AnalyticsDashboar
 import { AddTaskModal } from './src/components/common/AddTaskModal';
 import { PomodoroModal } from './src/components/common/PomodoroModal';
 import { GlobalSearchModal } from './src/components/common/GlobalSearchModal';
-import { AchievementsModal } from './src/components/common/AchievementsModal';
 import { EditProfileModal } from './src/components/common/EditProfileModal';
 import { StreakCalendarModal } from './src/components/common/StreakCalendarModal';
 import { CategoryManagerModal } from './src/components/common/CategoryManagerModal';
+import { TimerIncompleteModal } from './src/components/common/TimerIncompleteModal';
 import { StreakCalendarView } from './src/components/streak/StreakCalendarView';
 import { PomodoroView } from './src/components/pomodoro/PomodoroView';
 import { SettingsView } from './src/components/settings/SettingsView';
 import { HabitTrackerView } from './src/components/habits/HabitTrackerView';
+import { SplashScreen as AnimatedSplashScreen } from './src/components/splash/SplashScreen';
 import { triggerHaptic } from './src/services/haptics';
 import { Calendar, CheckSquare, BarChart2, BookOpen, LayoutDashboard, CheckCircle2, User, Sparkles, Flame } from 'lucide-react-native';
 
 import { SpatialBackgroundProvider } from './src/components/common/SpatialBackgroundContext';
 import { SpatialBackgroundContainer } from './src/components/common/SpatialBackgroundContainer';
+
+// Prevent native splash screen from auto-hiding until initial load completes
+SplashScreenNative.preventAutoHideAsync().catch(() => {});
 
 const THEME_KEYS: ThemeKey[] = ['pure_white', 'slate_light', 'minimal_white'];
 
@@ -38,6 +43,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'planner' | 'settings' | 'ai' | 'streak' | 'pomodoro' | 'habits'>('overview');
   const [currentThemeKey, setCurrentThemeKey] = useState<ThemeKey>('pure_white');
 
@@ -50,21 +56,12 @@ export default function App() {
   const [syllabus, setSyllabus] = useState<SubjectProgress[]>([]);
   const [aiSyncResults, setAiSyncResults] = useState<AISyncResult[]>([]);
   const [categories, setCategories] = useState<UserCategory[]>([]);
-  const [gamification, setGamification] = useState<UserGamification>({
-    xp: 0,
-    level: 1,
-    streakDays: 0,
-    totalFocusMins: 0,
-    completedPomodoros: 0,
-    unlockedBadgeIds: [],
-  });
 
   // Modals & Toast
   const [selectedTimerTask, setSelectedTimerTask] = useState<Task | undefined>(undefined);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showPomodoroModal, setShowPomodoroModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [showAchievementsModal, setShowAchievementsModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showCategoryManagerModal, setShowCategoryManagerModal] = useState(false);
@@ -82,27 +79,33 @@ export default function App() {
 
   useEffect(() => {
     async function loadData() {
-      await Database.init();
-      const prof = await Database.getUserProfile();
-      const t = await Database.getTasks();
-      const tt = await Database.getTimetable();
-      const sys = await Database.getSyllabus();
-      const ai = await Database.getAISyncResults();
-      const g = await Database.getGamification();
-      const cats = await Database.getCategories();
+      try {
+        await Database.init();
+        const prof = await Database.getUserProfile();
+        const t = await Database.getTasks();
+        const tt = await Database.getTimetable();
+        const sys = await Database.getSyllabus();
+        const ai = await Database.getAISyncResults();
+        const cats = await Database.getCategories();
 
-      setProfile(prof);
-      setTasks(t);
-      setTimetable(tt);
-      setSyllabus(sys);
-      setAiSyncResults(ai);
-      setGamification(g);
-      setCategories(cats);
-      setLoading(false);
+        setProfile(prof);
+        setTasks(t);
+        setTimetable(tt);
+        setSyllabus(sys);
+        setAiSyncResults(ai);
+        setCategories(cats);
+      } catch (e) {
+        console.warn('Initialization error:', e);
+      } finally {
+        setLoading(false);
+        // Hide native splash screen so custom animated splash component takes over smoothly
+        SplashScreenNative.hideAsync().catch(() => {});
+      }
     }
 
     loadData();
   }, []);
+
 
   const handleCycleTheme = () => {
     triggerHaptic.mediumImpact();
@@ -111,11 +114,25 @@ export default function App() {
     setCurrentThemeKey(THEME_KEYS[nextIndex]);
   };
 
+  const [timerIncompleteTask, setTimerIncompleteTask] = useState<Task | null>(null);
+
   const handleToggleComplete = async (taskId: string) => {
+    const targetTask = tasks.find(t => t.id === taskId);
+    if (targetTask && !targetTask.completed && targetTask.requiresTimer) {
+      const targetMins = Math.max(1, targetTask.timerDurationMins || targetTask.durationMins || 30);
+      const targetSecs = targetMins * 60;
+      const elapsedSecs = Math.max(0, targetTask.elapsedSeconds || 0);
+      const progressRatio = targetSecs > 0 ? (elapsedSecs / targetSecs) : 1;
+
+      if (progressRatio < 0.8) {
+        triggerHaptic.notificationWarning();
+        setTimerIncompleteTask(targetTask);
+        return;
+      }
+    }
+
     const updated = await Database.toggleTaskComplete(taskId);
-    const updatedG = await Database.getGamification();
     setTasks(updated);
-    setGamification(updatedG);
   };
 
   const handleSnoozeTask = async (taskId: string) => {
@@ -131,29 +148,22 @@ export default function App() {
 
   const handleSyncComplete = async (result: AISyncResult) => {
     setAiSyncResults([result, ...aiSyncResults]);
-    const updatedG = await Database.getGamification();
-    setGamification(updatedG);
   };
 
   const handlePomodoroSessionComplete = async (mins: number) => {
-    const updatedG = await Database.getGamification();
-    setGamification(updatedG);
-    triggerToast(`Focus session complete! +100 XP earned 🎯`);
+    triggerToast(`Focus session complete! 🎯`);
   };
 
   const handleRefreshTasks = async (updated: Task[]) => {
     setTasks(updated);
-    const updatedG = await Database.getGamification();
-    setGamification(updatedG);
   };
 
-  if (loading || !profile || !fontsLoaded) {
+  if (loading || !profile || !fontsLoaded || showSplash) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <Sparkles size={36} color="#2563EB" />
-        <Text style={styles.loadingText}>Initializing LogMyLife Engine...</Text>
-      </View>
+      <AnimatedSplashScreen
+        onFinish={() => setShowSplash(false)}
+        isReady={!loading && profile !== null && fontsLoaded}
+      />
     );
   }
 
@@ -181,17 +191,16 @@ export default function App() {
                   timetable={timetable}
                   syllabus={syllabus}
                   aiSyncResults={aiSyncResults}
-                  gamification={gamification}
                   categories={categories}
                   theme={theme}
                   onNavigateTab={(tab) => {
                     setActiveTab(tab);
                   }}
                   onOpenAddTask={() => setShowAddTaskModal(true)}
+                  onOpenAddHabit={() => setActiveTab('habits')}
                   onOpenPomodoro={() => setActiveTab('pomodoro')}
                   onOpenSearch={() => setShowSearchModal(true)}
                   onOpenEditProfile={() => setShowEditProfileModal(true)}
-                  onOpenAchievements={() => setShowAchievementsModal(true)}
                   onOpenStreakModal={() => setActiveTab('streak')}
                   onOpenCategoryManager={() => setShowCategoryManagerModal(true)}
                   onQuickCompleteTask={handleToggleComplete}
@@ -201,7 +210,6 @@ export default function App() {
               {activeTab === 'pomodoro' && (
                 <PomodoroView
                   theme={theme}
-                  gamification={gamification}
                   targetTask={selectedTimerTask}
                   onBackToDashboard={() => setActiveTab('overview')}
                   onSessionComplete={handlePomodoroSessionComplete}
@@ -212,7 +220,6 @@ export default function App() {
                 <StreakCalendarView
                   theme={theme}
                   tasks={tasks}
-                  gamification={gamification}
                   onBackToDashboard={() => setActiveTab('overview')}
                   onNavigateTab={(tab) => setActiveTab(tab)}
                 />
@@ -240,7 +247,6 @@ export default function App() {
                   categories={categories}
                   theme={theme}
                   onOpenEditProfile={() => setShowEditProfileModal(true)}
-                  onCycleTheme={handleCycleTheme}
                   onCategoriesUpdated={(updatedCats) => setCategories(updatedCats)}
                 />
               )}
@@ -249,11 +255,8 @@ export default function App() {
                 <AnalyticsDashboard
                   tasks={tasks}
                   syllabus={syllabus}
-                  aiSyncResults={aiSyncResults}
                   theme={theme}
-                  gamification={gamification}
                   categories={categories}
-                  onSyncComplete={handleSyncComplete}
                   onTasksUpdated={handleRefreshTasks}
                 />
               )}
@@ -405,7 +408,6 @@ export default function App() {
         visible={showPomodoroModal}
         onClose={() => setShowPomodoroModal(false)}
         theme={theme}
-        gamification={gamification}
         onSessionComplete={handlePomodoroSessionComplete}
       />
 
@@ -444,20 +446,27 @@ export default function App() {
         }}
       />
 
-      <AchievementsModal
-        visible={showAchievementsModal}
-        onClose={() => setShowAchievementsModal(false)}
-        theme={theme}
-        gamification={gamification}
-      />
-
       <StreakCalendarModal
         visible={showStreakModal}
         onClose={() => setShowStreakModal(false)}
         theme={theme}
         tasks={tasks}
-        gamification={gamification}
       />
+
+      <TimerIncompleteModal
+        visible={!!timerIncompleteTask}
+        task={timerIncompleteTask}
+        onClose={() => setTimerIncompleteTask(null)}
+        onResumeTimer={(t) => {
+          setSelectedTimerTask(t);
+          setActiveTab('pomodoro');
+        }}
+        onForceComplete={async (t) => {
+          const updated = await Database.toggleTaskComplete(t.id);
+          setTasks(updated);
+        }}
+      />
+
 
       {profile && (
         <EditProfileModal

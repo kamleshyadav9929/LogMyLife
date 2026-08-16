@@ -88,7 +88,7 @@ export const AcademicEmptyIllustration: React.FC<IllustrationProps> = ({ size = 
   );
 };
 
-// 3. Analytics & AI Insights Vector Illustration
+// 3. Analytics Insights Vector Illustration
 export const AnalyticsEmptyIllustration: React.FC<IllustrationProps> = ({ size = 120 }) => {
   return (
     <View style={styles.container}>

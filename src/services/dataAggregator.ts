@@ -1,4 +1,5 @@
 import { Task, ActivityLog, PomodoroSession, UserCategory, SubjectProgress, AISyncResult } from '../types';
+import { getLocalDateStr, getLocalDateFromISO } from '../utils/dateUtils';
 
 export interface DailySnapshot {
   dateStr: string;
@@ -18,7 +19,7 @@ export function getDailySnapshot(
   const dayTasks = tasks.filter(t => t.dateStr === dateStr);
   const completedTasks = dayTasks.filter(t => t.completed);
   const logs = activityLogs.filter(l => l.dateStr === dateStr);
-  const pomodoros = pomodoroSessions.filter(s => s.completedAt.startsWith(dateStr) && s.isCompleted);
+  const pomodoros = pomodoroSessions.filter(s => getLocalDateFromISO(s.completedAt) === dateStr && s.isCompleted);
 
   const focusFromTasks = completedTasks.reduce((acc, t) => acc + (t.durationMins || 0), 0);
   const focusFromPomodoros = pomodoros.reduce((acc, s) => acc + s.durationMins, 0);
@@ -49,7 +50,7 @@ export function getCategoryDistribution(
   const now = new Date();
   const startDate = new Date(now);
   startDate.setDate(startDate.getDate() - daysBack);
-  const startStr = startDate.toISOString().split('T')[0];
+  const startStr = getLocalDateStr(startDate);
 
   tasks.filter(t => t.completed && t.dateStr >= startStr).forEach(t => {
     if (dist[t.category]) {
@@ -65,3 +66,4 @@ export function getCategoryDistribution(
 
   return dist;
 }
+

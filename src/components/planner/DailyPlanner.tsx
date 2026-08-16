@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,21 @@ import {
   Platform,
   Modal,
   TextInput,
+  Alert,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
-import { Task, TaskCategory, UserCategory } from '../../types';
+import { Task, TaskCategory, UserCategory, AppUsageLog, AppPreset, POPULAR_APP_PRESETS } from '../../types';
 import { ThemeConfig, getCategoryColor, getCategoryLightBg, getCategoryTextColor, getCategoryName } from '../../theme/colors';
 import { FONTS } from '../../theme/typography';
 import { Database } from '../../storage/db';
 import { triggerHaptic } from '../../services/haptics';
+import { AppUsageTracker } from '../../services/appUsageTracker';
+import { NotificationService, NotificationPayload } from '../../services/notificationService';
+import { NotificationBanner } from '../common/NotificationBanner';
 import { BottomSheet } from '../common/BottomSheet';
 import { TimePickerModal } from '../common/TimePickerModal';
+import { TimerIncompleteModal } from '../common/TimerIncompleteModal';
 import {
   ChevronLeft,
   ChevronRight,
@@ -26,11 +33,21 @@ import {
   Trash2,
   AlertCircle,
   Play,
+  Pause,
   ArrowLeft,
   Timer,
   Bell,
   BellOff,
   CheckCircle2,
+  Camera,
+  Code,
+  MessageSquare,
+  Music,
+  Globe,
+  Tv,
+  Smartphone,
+  Sparkles,
+  Activity,
 } from 'lucide-react-native';
 
 interface Props {
@@ -75,6 +92,29 @@ function formatDecimalHourLabel(dec: number): string {
     return `${displayH} ${period}`;
   }
   return `${displayH}:${mins.toString().padStart(2, '0')} ${period}`;
+}
+
+function renderAppIcon(iconName: string, color: string, size: number = 18) {
+  switch (iconName) {
+    case 'camera':
+      return <Camera size={size} color={color} />;
+    case 'youtube':
+      return <Play size={size} color={color} />;
+    case 'code':
+      return <Code size={size} color={color} />;
+    case 'message-square':
+      return <MessageSquare size={size} color={color} />;
+    case 'music':
+      return <Music size={size} color={color} />;
+    case 'tv':
+      return <Tv size={size} color={color} />;
+    case 'globe':
+      return <Globe size={size} color={color} />;
+    case 'twitter':
+      return <Sparkles size={size} color={color} />;
+    default:
+      return <Smartphone size={size} color={color} />;
+  }
 }
 
 function getCatStyle(categories: UserCategory[], categoryId: string): { bg: string; bar: string; text: string } {
@@ -190,11 +230,33 @@ export const DailyPlanner: React.FC<Props> = ({
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end'>('start');
 
-  // Task Verification Modal State
+  // Task Verification & Timer Incomplete Modal State
+  const [timerIncompleteTask, setTimerIncompleteTask] = useState<Task | null>(null);
   const [verifyingTask, setVerifyingTask] = useState<Task | null>(null);
   const [verificationReason, setVerificationReason] = useState<'timer_required' | 'out_of_time' | null>(null);
 
   const [nowTime, setNowTime] = useState<Date>(new Date());
+  const [appUsageLogs, setAppUsageLogs] = useState<AppUsageLog[]>([]);
+
+  useEffect(() => {
+    async function fetchAppLogs() {
+      const logs = await Database.getAppUsageLogs();
+      setAppUsageLogs(logs);
+    }
+    fetchAppLogs();
+  }, []);
+
+  const handleQuickLogApp = async (preset: AppPreset) => {
+    triggerHaptic.mediumImpact();
+    const updated = await AppUsageTracker.quickLogAppSession(preset, 30);
+    setAppUsageLogs(updated);
+  };
+
+  const handleDeleteAppLog = async (logId: string) => {
+    triggerHaptic.mediumImpact();
+    const updated = await Database.deleteAppUsageLog(logId);
+    setAppUsageLogs(updated);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNowTime(new Date()), 60000);
@@ -262,6 +324,117 @@ export const DailyPlanner: React.FC<Props> = ({
     setEventTitle('');
   };
 
+  const [activeNotification, setActiveNotification] = useState<NotificationPayload | null>(null);
+  const [runningTimerTaskId, setRunningTimerTaskId] = useState<string | null>(null);
+  const activeTimerTaskRef = useRef<string | null>(null);
+  const timerStartedAtRef = useRef<number>(Date.now());
+  const baseElapsedRef = useRef<number>(0);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const backgroundStartTimeRef = useRef<number | null>(null);
+  const onTasksUpdatedRef = useRef(onTasksUpdated);
+
+  useEffect(() => {
+    onTasksUpdatedRef.current = onTasksUpdated;
+  }, [onTasksUpdated]);
+
+  useEffect(() => {
+    const unsubscribe = NotificationService.subscribe((payload) => {
+      setActiveNotification(payload);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    activeTimerTaskRef.current = runningTimerTaskId;
+  }, [runningTimerTaskId]);
+
+  // AppState Listener for Dynamic App Session Detection & Focus Interruption
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/active/) &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // App backgrounded
+        backgroundStartTimeRef.current = Date.now();
+      }
+
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App returned to foreground
+        if (backgroundStartTimeRef.current && activeTimerTaskRef.current) {
+          const bgDurationSecs = Math.floor((Date.now() - backgroundStartTimeRef.current) / 1000);
+
+          if (bgDurationSecs >= 3) {
+            setRunningTimerTaskId(null);
+            const sessionMins = Math.max(1, Math.round(bgDurationSecs / 60));
+
+            const updatedLogs = await AppUsageTracker.quickLogAppSession('App Activity', sessionMins);
+            setAppUsageLogs(updatedLogs);
+
+            NotificationService.notifyFocusTimerInterrupted('App Session', sessionMins);
+          }
+        }
+        backgroundStartTimeRef.current = null;
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!runningTimerTaskId) return;
+
+    // Fetch current task to initialize start timestamps safely
+    Database.getTasks().then(allTasks => {
+      const task = allTasks.find(t => t.id === runningTimerTaskId);
+      if (task) {
+        baseElapsedRef.current = Math.max(0, task.elapsedSeconds || 0);
+        timerStartedAtRef.current = Date.now();
+      }
+    });
+
+    const interval = setInterval(async () => {
+      const allTasks = await Database.getTasks();
+      const targetIdx = allTasks.findIndex(t => t.id === runningTimerTaskId);
+      if (targetIdx !== -1) {
+        const wallClockElapsedSecs = baseElapsedRef.current + Math.floor((Date.now() - timerStartedAtRef.current) / 1000);
+        const updatedTasks = [...allTasks];
+        updatedTasks[targetIdx] = {
+          ...updatedTasks[targetIdx],
+          elapsedSeconds: Math.max(0, wallClockElapsedSecs),
+        };
+        await Database.saveTasks(updatedTasks);
+        if (onTasksUpdatedRef.current) {
+          onTasksUpdatedRef.current(updatedTasks);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [runningTimerTaskId]);
+
+  const handleToggleTimerTask = async (taskId: string) => {
+    triggerHaptic.mediumImpact();
+    if (runningTimerTaskId === taskId) {
+      setRunningTimerTaskId(null);
+    } else {
+      setRunningTimerTaskId(taskId);
+      const allTasks = await Database.getTasks();
+      const targetTask = allTasks.find(t => t.id === taskId);
+      if (targetTask) {
+        const targetMins = Math.max(1, targetTask.timerDurationMins || targetTask.durationMins || 30);
+        NotificationService.notifyAppSessionStarted(targetTask.title, targetMins);
+      }
+    }
+  };
+
   const handleAttemptComplete = (task: Task) => {
     triggerHaptic.mediumImpact();
 
@@ -270,13 +443,20 @@ export const DailyPlanner: React.FC<Props> = ({
       return;
     }
 
-    if (task.requiresTimer) {
-      const isTimerDone = (task.leftoverSeconds !== undefined && task.leftoverSeconds <= 0) ||
-                          (task.elapsedSeconds !== undefined && task.elapsedSeconds >= (task.timerDurationMins || 25) * 60);
+    // Edge case guard: If timer is running for this task, stop the active timer ticker first
+    if (runningTimerTaskId === task.id) {
+      setRunningTimerTaskId(null);
+    }
 
-      if (!isTimerDone) {
-        setVerifyingTask(task);
-        setVerificationReason('timer_required');
+    if (task.requiresTimer) {
+      const targetMins = Math.max(1, task.timerDurationMins || task.durationMins || 30);
+      const targetSecs = targetMins * 60;
+      const elapsedSecs = Math.max(0, task.elapsedSeconds || 0);
+      const progressRatio = targetSecs > 0 ? (elapsedSecs / targetSecs) : 1;
+
+      if (progressRatio < 0.8) {
+        triggerHaptic.notificationWarning();
+        setTimerIncompleteTask(task);
         return;
       }
     }
@@ -286,6 +466,10 @@ export const DailyPlanner: React.FC<Props> = ({
 
   const handleDeleteTask = async (taskId: string) => {
     triggerHaptic.mediumImpact();
+    // Edge case guard: If deleted task has active timer running, stop timer immediately
+    if (runningTimerTaskId === taskId) {
+      setRunningTimerTaskId(null);
+    }
     const allTasks = await Database.getTasks();
     const filtered = allTasks.filter(t => t.id !== taskId);
     await Database.saveTasks(filtered);
@@ -343,6 +527,16 @@ export const DailyPlanner: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
+      {/* Floating Dedicated In-App Notification Banner */}
+      <NotificationBanner
+        visible={!!activeNotification}
+        title={activeNotification?.title || ''}
+        message={activeNotification?.message || ''}
+        type={activeNotification?.type || 'info'}
+        icon={activeNotification?.icon || 'bell'}
+        onDismiss={() => setActiveNotification(null)}
+      />
+
       {/* 1. Top Header Row (Month Name only in header, Today Date Pill on Right Side) */}
       <View style={styles.topHeaderRow}>
         <View style={styles.headerLeftRow}>
@@ -495,13 +689,21 @@ export const DailyPlanner: React.FC<Props> = ({
                 {timelineSegments.map((seg, idx) => {
                   const startLabel = formatDecimalHourLabel(seg.startDec);
                   const durationHours = seg.endDec - seg.startDec;
-                  // Base scale: 64px per hour. Longer slots (> 1 hr) scale proportionally taller!
                   const baseHourHeight = 64;
-                  const calculatedHeight = Math.max(44, Math.round(durationHours * baseHourHeight));
                   const task = seg.task;
                   const catStyle = task ? getCatStyle(categories, task.category) : null;
                   const catName = task ? getCategoryName(categories, task.category) : '';
                   const showCatName = catName && catName !== 'cat-work' && catName.toLowerCase() !== 'work';
+
+                  // Find app usage logs for this hour segment
+                  const dayAppLogs = (appUsageLogs || []).filter(l => l.dateStr === selectedDateStr);
+                  const matchingAppLogs = dayAppLogs.filter(log => {
+                    const logStartDec = parseTimeToDecimalHour(log.startTime);
+                    return logStartDec >= seg.startDec && logStartDec < seg.endDec;
+                  });
+
+                  const extraAppHeight = matchingAppLogs.length * 52;
+                  const calculatedHeight = Math.max(44, Math.round(durationHours * baseHourHeight) + extraAppHeight);
 
                   return (
                     <View key={idx} style={[styles.slotHourBlock, { minHeight: calculatedHeight }]}>
@@ -510,7 +712,7 @@ export const DailyPlanner: React.FC<Props> = ({
                         <Text style={styles.cleanTimeLabelText}>{startLabel}</Text>
                       </View>
 
-                      {/* Strip with Proportional Dynamic Height Scaling according to Task Duration */}
+                      {/* Strip with Proportional Dynamic Height Scaling according to Task Duration & App Logs */}
                       <TouchableOpacity
                         style={[
                           styles.whiteSlotStrip,
@@ -527,57 +729,142 @@ export const DailyPlanner: React.FC<Props> = ({
                         }}
                         activeOpacity={0.85}
                       >
-                        {task && catStyle ? (
-                          <View style={styles.taskStripInnerRow}>
-                            <View style={styles.slotTaskInfo}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text
-                                  style={[
-                                    styles.slotTaskTitle,
-                                    task.completed && styles.taskCompletedStrike,
-                                  ]}
-                                  numberOfLines={durationHours >= 1.5 ? 2 : 1}
-                                >
-                                  {task.title}
-                                </Text>
+                        <View style={{ width: '100%' }}>
+                          {task && catStyle ? (() => {
+                            const targetMins = task.timerDurationMins || task.durationMins || 30;
+                            const targetSecs = targetMins * 60;
+                            const elapsedSecs = task.elapsedSeconds || 0;
+                            const remainingSecs = Math.max(0, targetSecs - elapsedSecs);
+                            const remMins = Math.floor(remainingSecs / 60);
+                            const remSecs = (remainingSecs % 60).toString().padStart(2, '0');
+                            const pct = Math.min(100, Math.round((elapsedSecs / targetSecs) * 100));
+                            const isTimerActive = runningTimerTaskId === task.id;
 
-                                {/* Timer Required Icon */}
-                                {task.requiresTimer && (
-                                  <View style={styles.timerRequiredBadge}>
-                                    <Timer size={12} color="#2563EB" />
+                            return (
+                              <View style={styles.taskStripInnerRow}>
+                                {/* Round Checkbox Icon in Front (Left Side) */}
+                                <TouchableOpacity
+                                  style={[
+                                    styles.slotRoundCheckBtn,
+                                    task.completed && { backgroundColor: catStyle.bar, borderColor: catStyle.bar },
+                                  ]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleAttemptComplete(task);
+                                  }}
+                                >
+                                  {task.completed && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
+                                </TouchableOpacity>
+
+                                {/* Task Title and Time Remaining below (No Category) */}
+                                <View style={styles.slotTaskInfo}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text
+                                      style={[
+                                        styles.slotTaskTitle,
+                                        task.completed && styles.taskCompletedStrike,
+                                      ]}
+                                      numberOfLines={durationHours >= 1.5 ? 2 : 1}
+                                    >
+                                      {task.title}
+                                    </Text>
+
+                                    {/* Timer Required Icon */}
+                                    {task.requiresTimer && (
+                                      <View style={styles.timerRequiredBadge}>
+                                        <Timer size={12} color="#2563EB" />
+                                      </View>
+                                    )}
                                   </View>
+
+                                  {/* Subtitle with Time Remaining below task title (No Category) */}
+                                  <Text style={styles.slotTaskMeta}>
+                                    {task.requiresTimer
+                                      ? `⏱️ ${remMins}m ${remSecs}s remaining (${pct}%)`
+                                      : `${task.startTime || startLabel}${task.endTime ? ` - ${task.endTime}` : ''}`}
+                                  </Text>
+                                </View>
+
+                                {/* Play / Pause Timer Button for Timer Tasks */}
+                                {task.requiresTimer && !task.completed && (
+                                  <TouchableOpacity
+                                    style={[
+                                      styles.slotTimerPlayBtn,
+                                      isTimerActive && styles.slotTimerPlayBtnActive,
+                                    ]}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleTimerTask(task.id);
+                                    }}
+                                    activeOpacity={0.8}
+                                  >
+                                    {isTimerActive ? (
+                                      <Pause size={12} color="#FFFFFF" fill="#FFFFFF" />
+                                    ) : (
+                                      <Play size={12} color="#2563EB" fill="#2563EB" />
+                                    )}
+                                  </TouchableOpacity>
                                 )}
+
+                                {/* Delete Action Button */}
+                                <TouchableOpacity
+                                  style={styles.slotDeleteBtn}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTask(task.id);
+                                  }}
+                                >
+                                  <Trash2 size={13} color="#94A3B8" />
+                                </TouchableOpacity>
+                              </View>
+                            );
+                          })() : null}
+
+                          {/* App Usage Cards rendered on timeline */}
+                          {matchingAppLogs.map((log) => (
+                            <View
+                              key={log.id}
+                              style={[
+                                styles.appUsageTimelineCard,
+                                { backgroundColor: log.bgTint },
+                              ]}
+                            >
+                              <View style={[styles.appUsageIconCircle, { backgroundColor: log.iconColor + '15' }]}>
+                                {renderAppIcon(log.iconName, log.iconColor, 16)}
                               </View>
 
-                              <Text style={styles.slotTaskMeta}>
-                                {task.startTime || startLabel} {task.endTime ? `- ${task.endTime}` : ''}{showCatName ? ` • ${catName}` : ''}
-                              </Text>
+                              <View style={styles.appUsageCardInfo}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={styles.appUsageCardTitle}>{log.appName}</Text>
+                                  {log.isAutoTracked && (
+                                    <View style={styles.autoTrackBadge}>
+                                      <Text style={styles.autoTrackBadgeText}>AUTO</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <Text style={styles.appUsageCardTime}>
+                                  {log.startTime} - {log.endTime}
+                                </Text>
+                              </View>
+
+                              <View style={[styles.appUsageDurationPill, { backgroundColor: log.iconColor + '20' }]}>
+                                <Text style={[styles.appUsageDurationText, { color: log.iconColor }]}>
+                                  {log.durationMins}m
+                                </Text>
+                              </View>
+
+                              <TouchableOpacity
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAppLog(log.id);
+                                }}
+                                style={{ padding: 4 }}
+                              >
+                                <X size={14} color="#94A3B8" />
+                              </TouchableOpacity>
                             </View>
-
-                            <TouchableOpacity
-                              style={[
-                                styles.slotCheckBtn,
-                                task.completed && { backgroundColor: catStyle.bar, borderColor: catStyle.bar },
-                              ]}
-                              onPress={(e) => {
-                                e.stopPropagation();
-                                handleAttemptComplete(task);
-                              }}
-                            >
-                              {task.completed && <Check size={12} color="#FFFFFF" />}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={styles.slotDeleteBtn}
-                              onPress={(e) => {
-                                e.stopPropagation();
-                                handleDeleteTask(task.id);
-                              }}
-                            >
-                              <Trash2 size={13} color="#94A3B8" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : null}
+                          ))}
+                        </View>
                       </TouchableOpacity>
                     </View>
                   );
@@ -927,6 +1214,22 @@ export const DailyPlanner: React.FC<Props> = ({
         </Modal>
       )}
 
+      {/* Visual Dedicated Timer Incomplete Modal */}
+      <TimerIncompleteModal
+        visible={!!timerIncompleteTask}
+        task={timerIncompleteTask}
+        onClose={() => setTimerIncompleteTask(null)}
+        onResumeTimer={(t) => {
+          handleToggleTimerTask(t.id);
+          if (onStartTaskTimer) {
+            onStartTaskTimer(t);
+          }
+        }}
+        onForceComplete={(t) => {
+          onToggleComplete(t.id);
+        }}
+      />
+
       {/* Visual Google-Style Time Picker Modal */}
       <TimePickerModal
         visible={timePickerVisible}
@@ -1220,6 +1523,31 @@ const styles = StyleSheet.create({
   taskCompletedStrike: {
     textDecorationLine: 'line-through',
     opacity: 0.6,
+  },
+  slotRoundCheckBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  slotTimerPlayBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  slotTimerPlayBtnActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   slotCheckBtn: {
     width: 22,
@@ -1554,5 +1882,97 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.groteskBold,
     fontSize: 13,
     color: '#64748B',
+  },
+
+  // Quick App Logger Bar
+  quickAppLoggerContainer: {
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  quickAppLoggerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+  quickAppLoggerTitle: {
+    fontFamily: FONTS.jakartaSemibold,
+    fontSize: 11.5,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  quickAppLoggerScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: 'center',
+  },
+  appPresetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  appPresetName: {
+    fontFamily: FONTS.jakartaSemibold,
+    fontSize: 12,
+  },
+
+  // App Usage Timeline Card
+  appUsageTimelineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginTop: 6,
+    width: '100%',
+  },
+  appUsageIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  appUsageCardInfo: {
+    flex: 1,
+  },
+  appUsageCardTitle: {
+    fontFamily: FONTS.jakartaBold,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  autoTrackBadge: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  autoTrackBadgeText: {
+    fontFamily: FONTS.jakartaBold,
+    fontSize: 9,
+    color: '#FFFFFF',
+  },
+  appUsageCardTime: {
+    fontFamily: FONTS.jakartaRegular,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  appUsageDurationPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  appUsageDurationText: {
+    fontFamily: FONTS.jakartaBold,
+    fontSize: 11.5,
   },
 });

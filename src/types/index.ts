@@ -80,25 +80,6 @@ export interface AISyncResult {
   syncedAt: string;
 }
 
-export interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  iconName: string;
-  unlocked: boolean;
-  unlockedAt?: string;
-  reqCount: number;
-  currentCount: number;
-}
-
-export interface UserGamification {
-  xp: number;
-  level: number;
-  streakDays: number;
-  totalFocusMins: number;
-  completedPomodoros: number;
-  unlockedBadgeIds: string[];
-}
 
 export interface PomodoroSession {
   id: string;
@@ -152,3 +133,60 @@ export const CATEGORY_TAG_INFO: Record<CategoryTag, { label: string; icon: strin
   health: { label: 'Health', icon: 'activity' },
   routine: { label: 'Routine', icon: 'user' },
 };
+
+export interface AppUsageLog {
+  id: string;
+  appName: string;
+  packageName: string;
+  iconName: string;
+  iconColor: string;
+  bgTint: string;
+  startTime: string;
+  endTime: string;
+  durationMins: number;
+  dateStr: string;
+  categoryTag: CategoryTag;
+  isAutoTracked?: boolean;
+}
+
+export interface AppPreset {
+  name: string;
+  packageName: string;
+  iconName: string;
+  iconColor: string;
+  bgTint: string;
+  categoryTag: CategoryTag;
+  emoji: string;
+}
+
+export const POPULAR_APP_PRESETS: AppPreset[] = [
+  { name: 'Instagram', packageName: 'com.instagram.android', iconName: 'camera', iconColor: '#E4405F', bgTint: '#FDF2F8', categoryTag: 'fun', emoji: '📸' },
+  { name: 'YouTube', packageName: 'com.google.android.youtube', iconName: 'youtube', iconColor: '#FF0000', bgTint: '#FEF2F2', categoryTag: 'fun', emoji: '▶️' },
+  { name: 'VS Code', packageName: 'com.microsoft.vscode', iconName: 'code', iconColor: '#007ACC', bgTint: '#F0F9FF', categoryTag: 'work', emoji: '💻' },
+  { name: 'WhatsApp', packageName: 'com.whatsapp', iconName: 'message-square', iconColor: '#25D366', bgTint: '#F0FDF4', categoryTag: 'routine', emoji: '💬' },
+  { name: 'Spotify', packageName: 'com.spotify.music', iconName: 'music', iconColor: '#1DB954', bgTint: '#F0FDF4', categoryTag: 'fun', emoji: '🎵' },
+  { name: 'X / Twitter', packageName: 'com.twitter.android', iconName: 'twitter', iconColor: '#1DA1F2', bgTint: '#F0F9FF', categoryTag: 'fun', emoji: '🐦' },
+  { name: 'Netflix', packageName: 'com.netflix.mediaclient', iconName: 'tv', iconColor: '#E50914', bgTint: '#FEF2F2', categoryTag: 'fun', emoji: '🍿' },
+  { name: 'Chrome / Web', packageName: 'com.android.chrome', iconName: 'globe', iconColor: '#4285F4', bgTint: '#EFF6FF', categoryTag: 'productive', emoji: '🌐' },
+];
+
+export type HabitFrequencyType = 'daily' | 'weekly_target' | 'specific_days';
+
+export interface Habit {
+  id: string;
+  name: string;
+  color: string;
+  frequencyType: HabitFrequencyType;
+  targetDays: number[]; // 0=Sun, 1=Mon...6=Sat (used for specific_days)
+  weeklyTargetCount?: number; // e.g. 5 times per week (used for weekly_target)
+  completedDates: string[]; // array of "YYYY-MM-DD"
+  createdAt: string;
+  categoryId?: string; // linked to UserCategory.id
+  reminderTime?: string; // e.g. "08:00 AM"
+  goalDescription?: string; // e.g. "Read 15 pages" or "Drink 2L water"
+  notes?: string;
+  streak: number;
+  bestStreak: number;
+}
+
+

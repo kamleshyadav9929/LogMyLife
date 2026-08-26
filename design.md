@@ -1,120 +1,176 @@
-# LogMyLife — Unified Design System & Component Guidelines (`design.md`)
-
-This document serves as the authoritative Design System specification for **LogMyLife**. All screens, components, modals, and layouts must strictly adhere to the tokens and component rules defined here.
+# NOVI — Material 3 Design System (`DESIGN.md`)
 
 ---
 
-## 1. Visual Aesthetics & Design Philosophy
+## 1. System Philosophy & Google Pixel Quality
 
-- **Theme Style**: Soft-Fill Spatial Material 3 hybrid design.
-- **Core Principles & Mandatory Styling Rules**:
-  - **No Outlines or Harsh Dark Fills on Pills & Action Buttons**: All pill buttons (mode switchers, tab chips, category pills) and secondary icon action buttons (Reset, Next, Back, Close) MUST use pure soft background fills (`#F1F5F9`, `#EFF6FF`, `#ECFDF5`, `#FAF5FF`) with `borderWidth: 0`. Active pills must use soft blue fills (`#EFF6FF` with `#1A73E8` text) — NEVER use harsh dark slate (`#0F172A`) for chip or pill button backgrounds.
-  - **Soft Background Fills**: Use soft, soothing background fills (`#F3F7FF`, `#EEF4FF`, `#F8FAFC`, `#F0F4FF`, `#EFF6FF`) to demarcate containers, pills, and cards.
-  - **16–20dp Corner Radius**: Use generous `16px` to `20px` corner radii across all cards, containers, grid cells, and navigation bars.
-  - **Subtle Elevation & Soft Shadows**: Use micro drop shadows for primary actions without harsh outlines.
-  - **Crisp High-Contrast Typography**: Clear titles in `#0F172A` with functional color accents (Flame Amber `#F59E0B`, Royal Blue `#2563EB`, Violet `#7C3AED`, Emerald `#10B981`).
+The NOVI design system is built entirely upon **Google Material 3 (Material You)** principles, delivering the calm, restrained, high-craft quality found in Google Pixel native software (Google Calendar, Keep, Clock, Tasks, and Settings).
+
+### Golden Rule: CONTENT > FUNCTION > DECORATION
+Every visual element must serve a distinct purpose. No decorative glassmorphism, floating neon blobs, heavy 3D drop shadows, or unprompted animations.
 
 ---
 
-## 2. Color Palette & Design Tokens
+## 2. Color Architecture & Semantic Roles
 
-### Surface & Background Tokens
-| Token Name | Hex Code | Usage |
-| :--- | :--- | :--- |
-| `surfacePage` | `#FFFFFF` | Primary screen canvas background |
-| `surfaceContainer` | `#F8FAFC` | Secondary card & inspector container fill |
-| `surfaceMuted` | `#F1F5F9` | Input fields, pill buttons, secondary header fills |
-| `borderHairline` | `#F1F5F9` | Subtle internal section dividers |
-| `borderDefault` | `#E2E8F0` | Default card & container outlines (1px) |
-| `borderStrong` | `#CBD5E1` | Active button & focused element outlines |
+NOVI uses a strictly semantic Material 3 ColorScheme. No widget or screen may hardcode raw hex values directly.
 
-### Typography Tokens
-| Token Name | Hex Code | Usage |
-| :--- | :--- | :--- |
-| `textPrimary` | `#0F172A` | Primary titles, active values, high-emphasis text |
-| `textSecondary` | `#334155` / `#475569` | Subtitles, body copy, descriptions |
-| `textMuted` | `#64748B` / `#94A3B8` | Column headers, timestamps, placeholders |
-| `textDisabled` | `#CBD5E1` | Out-of-month or future calendar numbers |
+### Semantic Token Matrix
 
-### Functional Accent Tokens
-| Accent Name | Primary Hex | Light Fill Hex | Border Hex | Usage |
-| :--- | :--- | :--- | :--- | :--- |
-| **Streak / Flame** | `#F59E0B` | `#FEF3C7` | `#FDE68A` | Active streaks, flame icons, done dates |
-| **Royal Blue** | `#2563EB` | `#EFF6FF` | `#BFDBFE` | Primary actions, today highlights, links |
-| **AI / Violet** | `#7C3AED` | `#FAF5FF` | `#E9D5FF` | AI insights, selection highlights, re-planner |
-| **Emerald Success** | `#10B981` | `#ECFDF5` | `#A7F3D0` | Task completion, XP badges, positive stats |
-
----
-
-## 3. Typography & Font Specifications
-
-- **Display Headings**: `Gilroy-ExtraBold` or `PlusJakartaSans-Bold` (`fontSize: 17` - `24px`, `lineHeight: 1.25`)
-- **Section Headers**: `PlusJakartaSans-Bold` (`fontSize: 14` - `16px`, `letterSpacing: 0.5px`)
-- **Body & Controls**: `PlusJakartaSans-Medium` / `PlusJakartaSans-Regular` (`fontSize: 12` - `14px`, `lineHeight: 18` - `20px`)
-- **Small Labels & Badges**: `PlusJakartaSans-Bold` (`fontSize: 10` - `11px`, `letterSpacing: 0.5px`)
+| Token | Light Mode | Dark Mode | Semantic Function |
+| :--- | :--- | :--- | :--- |
+| **`primary`** | `#1D4ED8` (Cobalt Indigo) | `#93C5FD` (Soft Sky) | Key primary actions, active indicators, brand accent |
+| **`onPrimary`** | `#FFFFFF` | `#082F49` | Content rendered on top of `primary` |
+| **`primaryContainer`** | `#EFF6FF` (Subtle Sky Tint) | `#1E3A8A` (Deep Slate Blue) | Selected chips, active destination pill, highlight cards |
+| **`onPrimaryContainer`** | `#1E40AF` | `#DBEAFE` | Content rendered on `primaryContainer` |
+| **`secondary`** | `#0F766E` (Botanical Sage) | `#5EEAD4` (Mint Sage) | Habits, routine badges, positive balance |
+| **`onSecondary`** | `#FFFFFF` | `#042F2E` | Content rendered on `secondary` |
+| **`secondaryContainer`** | `#F0FDFA` | `#134E4A` | Habit cards, routine tags |
+| **`onSecondaryContainer`**| `#115E59` | `#CCFBF1` | Content on `secondaryContainer` |
+| **`tertiary`** | `#D97706` (Warm Amber) | `#FCD34D` (Soft Honey) | Continuity, time warnings, focus intervals |
+| **`tertiaryContainer`** | `#FEF3C7` | `#78350F` | Attention banners, streak indicators |
+| **`onTertiaryContainer`** | `#92400E` | `#FDE68A` | Content on `tertiaryContainer` |
+| **`error`** | `#DC2626` (Muted Crimson) | `#FCA5A5` (Soft Coral) | Missed activities, cancellations, destructive actions |
+| **`onError`** | `#FFFFFF` | `#450A0A` | Content on `error` |
+| **`errorContainer`** | `#FEE2E2` | `#7F1D1D` | Alert containers, interruption alerts |
+| **`onErrorContainer`** | `#991B1B` | `#FEE2E2` | Content on `errorContainer` |
+| **`surface`** | `#FFFFFF` (Pure Canvas) | `#0B0F19` (Deep Charcoal) | Primary background canvas |
+| **`surfaceContainerLowest`**| `#FFFFFF` | `#080C14` | Recessed backgrounds |
+| **`surfaceContainerLow`** | `#F8FAFC` | `#111827` | Primary card and section surface |
+| **`surfaceContainer`** | `#F1F5F9` | `#1E293B` | Floating cards, modal sheets, search bars |
+| **`surfaceContainerHigh`** | `#E2E8F0` | `#334155` | Elevated chips, action buttons, dialogs |
+| **`surfaceContainerHighest`**| `#CBD5E1` | `#475569` | Unselected toggle tracks, strong chips |
+| **`onSurface`** | `#0F172A` (Slate 900) | `#F8FAFC` (Slate 50) | Primary headlines, main body text |
+| **`onSurfaceVariant`** | `#475569` (Slate 600) | `#94A3B8` (Slate 400) | Secondary subtitles, timestamps, placeholders |
+| **`outline`** | `#CBD5E1` | `#475569` | Default 1px structural borders |
+| **`outlineVariant`** | `#F1F5F9` | `#1E293B` | Hairline list dividers |
 
 ---
 
-## 4. Component Patterns
+## 3. Typography Scale & Hierarchy
 
-### A. Top Page Navigation Header
-- **Layout**: Horizontal row with `justifyContent: 'space-between'`, `alignItems: 'center'`.
-- **Back Button**:
-  - Background: `#F1F5F9`, Border: `1px #E2E8F0`, `borderRadius: 12`.
-  - Padding: `paddingHorizontal: 12`, `paddingVertical: 7`.
-  - Icon: `<ArrowLeft size={16} color="#0F172A" />` + Text: `Overview` (`12px Bold`).
-- **Title Box**: Centered with icon (`<Flame size={20} color="#F59E0B" />`) + Title text (`18px Display Bold #0F172A`).
+Typography creates structure and readability before color does. Most everyday UI relies cleanly on `title`, `body`, and `label`.
 
-### B. Summary Metric Cards
-- **Container Row**: `flexDirection: 'row'`, `gap: 10`.
-- **Individual Stat Card**:
-  - Flex: `flex: 1`.
-  - Background: `#FFFFFF`, Border: `1px #E2E8F0`, `borderRadius: 16`.
-  - Padding: `padding: 14`.
-  - Shadow: `shadowColor: '#0F172A'`, `shadowOffset: { width: 0, height: 4 }`, `shadowOpacity: 0.04`, `shadowRadius: 8`, `elevation: 2`.
-  - Icon: `20px` functional accent icon.
-  - Value: `15px Display Bold #0F172A`.
-  - Label: `11px Medium #64748B`.
+```text
+Display:
+  displayLarge:   32px / 40px line-height, SemiBold (600) — Milestones, big timer numbers
+  displayMedium:  28px / 36px line-height, SemiBold (600)
+  displaySmall:   24px / 32px line-height, SemiBold (600)
 
-### C. Google Material Month Navigation Bar
-- **Bar Container**: Background `#F8FAFC`, Border `1px #E2E8F0`, `borderRadius: 18`, `paddingHorizontal: 10`, `paddingVertical: 8`.
-- **Navigation Buttons**:
-  - Size: `38x38px` circular button (`borderRadius: 19`).
-  - Background: `#FFFFFF`, Border: `1px #CBD5E1`.
-  - Shadow: `shadowColor: '#0F172A'`, `shadowOffset: { width: 0, height: 2 }`, `shadowOpacity: 0.06`, `shadowRadius: 4`, `elevation: 2`.
-  - Icons: `<ChevronLeft size={20} color="#0F172A" />` and `<ChevronRight size={20} color="#0F172A" />`.
-- **Month Title**: `17px Display Bold #0F172A`.
-- **Today Pill**: Background `#FFFFFF`, Border `1px #2563EB`, `borderRadius: 10`, `paddingHorizontal: 10`, `paddingVertical: 5`, Text: `11px Bold #2563EB`.
+Headline:
+  headlineLarge:  22px / 28px line-height, SemiBold (600)
+  headlineMedium: 20px / 26px line-height, SemiBold (600) — Screen titles
+  headlineSmall:  18px / 24px line-height, SemiBold (600)
 
-### D. Calendar Grid & Cells
-- **Header Row**: Day labels (`Sun` through `Sat`), `12px Bold #64748B`, `textAlign: 'center'`.
-- **Grid Container**: Background `#FFFFFF`, Border `1px #E2E8F0`, `borderRadius: 20`, `padding: 8`.
-- **Grid Cell States**:
-  - Size: `width: 14.28%`, `height: 52px`, `borderRadius: 12`, `marginVertical: 2`.
-  - **State 1: Active Streak Date (`isDone`)**:
-    - Background: `#FEF3C7` (Warm Gold).
-    - Border: `1px #FDE68A`.
-    - Text: `#92400E` (`13px Bold`).
-    - Icon: `🔥` (`12px`).
-  - **State 2: Today (`isToday`)**:
-    - Background: `#EFF6FF` (Light Blue Tint).
-    - Border: `1.5px #2563EB`.
-    - Text: `#1D4ED8` (`13px Bold`).
-    - Dot: `5x5px` circular indicator (`#2563EB`).
-  - **State 3: Selected Cell**:
-    - Border: `2px #7C3AED` (Violet highlight).
-  - **State 4: Default Past / Future Cell**:
-    - Text: `#334155` (Current month) / `#CBD5E1` (Future).
+Title:
+  titleLarge:     17px / 24px line-height, SemiBold (600) — Modal headers, section headers
+  titleMedium:    15px / 22px line-height, Medium (500)   — Card titles, list headings
+  titleSmall:     13px / 18px line-height, Medium (500)   — Sub-group titles
 
-### E. Day Inspection Activity Card
-- **Container**: Background `#F8FAFC`, Border `1px #E2E8F0`, `borderRadius: 16`, `padding: 16`.
-- **Header**: Icon `<CheckCircle2 size={16} color="#10B981" />` + Date text (`14px Bold #0F172A`).
-- **Body**: Activity checklist bullets (`✓ Completed X task(s)`, `📓 Saved daily reflection log`).
+Body:
+  bodyLarge:      15px / 22px line-height, Regular (400)  — Primary reading text
+  bodyMedium:     13px / 18px line-height, Regular (400)  — Descriptions, details
+  bodySmall:      12px / 16px line-height, Regular (400)  — Caption notes
+
+Label:
+  labelLarge:     14px / 18px line-height, Medium (500)   — Button text, tab labels
+  labelMedium:    12px / 16px line-height, Medium (500)   — Chips, tags, column headers
+  labelSmall:     11px / 14px line-height, Medium (500)   — Timestamps, micro status indicators
+```
 
 ---
 
-## 5. Implementation Rules for Developers
+## 4. Spacing Scale (8-Point Grid)
 
-1. **Strict Token Usage**: Never hardcode random colors or radii. Use the exact values from this specification.
-2. **Theme Consistency**: All interactive cards must feature proper borders (`1px #E2E8F0`), appropriate rounded corners (`borderRadius: 12-18px`), and subtle spatial depth.
-3. **Responsive Spacing**: Ensure calendar grids use percentages (`width: '14.28%'`) so they fit any mobile viewport seamlessly.
+Strict adherence to standard spacing intervals ensures rhythm and breathing room:
+
+```dart
+class NoviSpacing {
+  static const double space4  = 4.0;
+  static const double space8  = 8.0;
+  static const double space12 = 12.0;
+  static const double space16 = 16.0;
+  static const double space20 = 20.0;
+  static const double space24 = 24.0;
+  static const double space32 = 32.0;
+  static const double space40 = 40.0;
+  static const double space48 = 48.0;
+  static const double space64 = 64.0;
+}
+```
+
+---
+
+## 5. Shape & Corner Radius Standards
+
+NOVI balances soft squircle cards with purpose-driven pill controls.
+
+```dart
+class NoviShapes {
+  static const double radiusSmall      = 8.0;   // Small badges, micro controls
+  static const double radiusMedium     = 12.0;  // TextFields, action buttons
+  static const double radiusCard       = 16.0;  // Standard cards, list containers
+  static const double radiusLargeCard  = 20.0;  // Hero containers, section groups
+  static const double radiusDialog     = 24.0;  // Confirmation dialogs
+  static const double radiusSheet      = 28.0;  // Modal bottom sheets (top corners)
+  static const double radiusPill       = 100.0; // Filter chips, navigation indicator, tags
+}
+```
+
+---
+
+## 6. Elevation & Depth
+
+- **Primary Mechanism**: Tonal surface differences (`surface` vs `surfaceContainerLow` vs `surfaceContainer`).
+- **Secondary Mechanism**: 1px subtle `outlineVariant` border.
+- **Shadows**: Only subtle micro-shadows on floating elements (e.g. FAB, Bottom Sheets, Live Overlay). **Zero giant black drop shadows or glowing blurs.**
+
+---
+
+## 7. Icon System & Semantics
+
+NOVI strictly uses **Material Symbols Rounded** (`Icons.rounded` / standard Material 3 icons).
+
+### Semantic Icon Standardization
+- Search → `Icons.search_rounded`
+- Settings → `Icons.tune_rounded` or `Icons.settings_rounded`
+- Add → `Icons.add_rounded`
+- Delete → `Icons.delete_outline_rounded`
+- Edit → `Icons.edit_outlined`
+- Back → `Icons.arrow_back_rounded`
+- More → `Icons.more_vert_rounded`
+- Calendar / Schedule → `Icons.calendar_today_rounded` / `Icons.calendar_month_rounded`
+- Focus / Timer → `Icons.timer_rounded`
+- Habits / Rhythm → `Icons.repeat_rounded` / `Icons.routine_rounded`
+- Insights / Trends → `Icons.insights_rounded` / `Icons.bar_chart_rounded`
+- Check / Done → `Icons.check_rounded`
+- Close → `Icons.close_rounded`
+- Profile → `Icons.person_rounded`
+
+---
+
+## 8. Standard Reusable Components Catalog
+
+Every component in NOVI strictly derives styling from `Theme.of(context)`:
+
+1. **`NoviCard`**: Tonal background (`surfaceContainerLow`), 16dp radius, 1px `outlineVariant` border, tap ripple.
+2. **`NoviButton`**: Filled (`primary`), Tonal (`secondaryContainer`), Outlined (`outline`), and Text buttons with minimum 48dp touch targets.
+3. **`NoviChip`**: Filter and action pills with smooth selected/unselected state transitions.
+4. **`NoviSectionHeader`**: Clean title with optional trailing "See all" or action button.
+5. **`NoviEmptyState`**: Minimal, clear explanation of an empty screen with a single direct CTA.
+6. **`NoviLoadingState`**: Integrated non-blocking skeleton or subtle tonal spinner.
+7. **`NoviErrorState`**: Clear human explanation with a friendly "Try again" action.
+8. **`NoviBanner`**: Contextual M3 notification banner (e.g., auto-shift notice with Undo).
+9. **`NoviLiveTimerOverlay`**: Persistent floating bottom pill displaying active focus countdown and quick controls.
+10. **`NoviModalSheet`**: Standard M3 28dp top-radius bottom sheet with drag handle.
+
+---
+
+## 9. Motion & Accessibility
+
+- **Motion**: Duration 150–250ms with `Curves.easeInOutCubic` or `Curves.easeOutCubic`. Fast, purposeful, and never disorienting.
+- **Accessibility**: All interactive elements have ≥ 48x48dp touch targets, WCAG 2.1 AA compliant color contrast (≥ 4.5:1 for body text, ≥ 3.0:1 for large text and icons), and full support for dynamic system font scaling.
+
+---
+
+*NOVI Material 3 Design System Specification finalized.*
